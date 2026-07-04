@@ -1,0 +1,55 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: lakehouse
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Real-time lakehouse platform
+
+  # Allow deployments only from this repository.
+  sourceRepos:
+    - https://github.com/yvan-ai/real-time-lakehouse   # replace with actual repo URL
+
+  # Destination clusters and namespaces that applications in this project may target.
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: lakehouse
+    - server: https://kubernetes.default.svc
+      namespace: streaming
+    - server: https://kubernetes.default.svc
+      namespace: flink
+    - server: https://kubernetes.default.svc
+      namespace: trino
+    - server: https://kubernetes.default.svc
+      namespace: argocd
+
+  # Cluster-scoped resources (Namespaces, ClusterRoles, etc.) allowed.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+
+  # Namespace-scoped resource allow-list (broad — restrict further as needed).
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  # Roles within the project.
+  roles:
+    - name: ci-deployer
+      description: GitHub Actions CD — sync apps only
+      policies:
+        - p, proj:lakehouse:ci-deployer, applications, sync,   lakehouse/*, allow
+        - p, proj:lakehouse:ci-deployer, applications, get,    lakehouse/*, allow
+        - p, proj:lakehouse:ci-deployer, applications, action, lakehouse/*, allow
+      jwtTokens: []   # tokens issued via `argocd proj role create-token`
+
+    - name: read-only
+      description: Observability / dashboards
+      policies:
+        - p, proj:lakehouse:read-only, applications, get, lakehouse/*, allow

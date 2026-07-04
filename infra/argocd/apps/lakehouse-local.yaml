@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lakehouse-local
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    environment: local
+    team: data-platform
+spec:
+  project: lakehouse
+
+  source:
+    repoURL: https://github.com/yvan-ai/real-time-lakehouse
+    targetRevision: main
+    path: infra/kubernetes/overlays/local
+
+  destination:
+    server: https://kubernetes.default.svc
+    # Namespace is intentionally blank — each base manifest declares its own.
+    namespace: lakehouse
+
+  syncPolicy:
+    # Manual sync for local — operator triggers via CD workflow or ArgoCD UI.
+    automated: null
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore fields that are managed by operators (Strimzi, Flink Operator).
+  ignoreDifferences:
+    - group: kafka.strimzi.io
+      kind: Kafka
+      jsonPointers:
+        - /status
+    - group: flink.apache.org
+      kind: FlinkDeployment
+      jsonPointers:
+        - /status
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration

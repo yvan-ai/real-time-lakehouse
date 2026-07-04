@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# No global namespace here — each base sets its own:
+#   minio base  → lakehouse
+#   kafka base  → streaming
+#   kafka-topics → streaming
+
+resources:
+  - ../../base/minio
+  - ../../base/postgres
+  - ../../base/kafka
+  - ../../base/flink
+  - ../../base/nessie
+  - ../../base/trino
+  - ../../base/monitoring
+  - ../../../../pipelines/streaming/kafka-topics
+  - ../../../../pipelines/streaming/kafka-connect
+
+secretGenerator:
+  - name: minio-credentials
+    namespace: lakehouse
+    envs:
+      - minio.env
+    options:
+      disableNameSuffixHash: true
