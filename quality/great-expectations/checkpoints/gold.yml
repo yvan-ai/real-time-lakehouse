@@ -1,0 +1,37 @@
+name: gold
+config_version: 1.0
+class_name: Checkpoint
+run_name_template: "%Y%m%d-%H%M%S-gold"
+template_name: null
+module_name: great_expectations.checkpoint
+
+validations:
+  - batch_request:
+      datasource_name: trino_lakehouse
+      data_connector_name: default_inferred_data_connector_name
+      data_asset_name: gold.daily_revenue
+    expectation_suite_name: gold_daily_revenue
+
+  - batch_request:
+      datasource_name: trino_lakehouse
+      data_connector_name: default_inferred_data_connector_name
+      data_asset_name: gold.customer_metrics
+    expectation_suite_name: gold_customer_metrics
+
+action_list:
+  - name: store_validation_result
+    action:
+      class_name: StoreValidationResultAction
+
+  - name: store_evaluation_params
+    action:
+      class_name: StoreEvaluationParametersAction
+
+  - name: update_data_docs
+    action:
+      class_name: UpdateDataDocsAction
+      site_names:
+        - local_site
+
+evaluation_parameters: {}
+runtime_configuration: {}

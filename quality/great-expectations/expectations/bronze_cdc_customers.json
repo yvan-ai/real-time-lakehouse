@@ -1,0 +1,105 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "bronze_cdc_customers",
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.0",
+    "notes": "Bronze — raw.cdc_customers. Debezium CDC stream. Same envelope checks as cdc_orders."
+  },
+  "expectations": [
+
+    // ── Table-level ─────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {"min_value": 1, "max_value": null},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_ordered_list",
+      "kwargs": {
+        "column_list": [
+          "cdc_id", "op", "ts_ms", "source_db", "source_table",
+          "txn_id", "before", "after", "ingested_at"
+        ]
+      },
+      "meta": {}
+    },
+
+    // ── cdc_id ────────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "cdc_id"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": {"column": "cdc_id"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "cdc_id",
+        "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "meta": {}
+    },
+
+    // ── op ────────────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "op"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "op",
+        "value_set": ["c", "u", "d", "r"]
+      },
+      "meta": {}
+    },
+
+    // ── ts_ms ─────────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "ts_ms"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "ts_ms", "min_value": 1000000000000, "max_value": null},
+      "meta": {"notes": "Epoch ms sanity check."}
+    },
+
+    // ── source_db / source_table ──────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "source_db"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "source_table"},
+      "meta": {}
+    },
+
+    // ── after ────────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "after",
+        "row_condition": "op in ('c', 'u', 'r')",
+        "condition_parser": "great_expectations__experimental"
+      },
+      "meta": {}
+    },
+
+    // ── ingested_at ───────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "ingested_at"},
+      "meta": {}
+    }
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "gold_customer_metrics",
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.0",
+    "notes": "Gold — gold.customer_metrics. Customer LTV and behavioural KPIs. Validate PK uniqueness, date ordering, non-negative counts, churn flag logic, and revenue consistency."
+  },
+  "expectations": [
+
+    // ── Table-level ─────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {"min_value": 1, "max_value": null},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_ordered_list",
+      "kwargs": {
+        "column_list": [
+          "customer_id", "country_code", "segment", "first_order_date",
+          "last_order_date", "total_orders", "total_revenue", "avg_order_value",
+          "days_since_last_order", "is_churned", "computed_at"
+        ]
+      },
+      "meta": {}
+    },
+
+    // ── customer_id ───────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "customer_id"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": {"column": "customer_id"},
+      "meta": {"notes": "One row per customer — gold is a full refresh per bucket."}
+    },
+
+    // ── country_code ──────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "country_code",
+        "regex": "^[A-Z]{2}$",
+        "mostly": 0.999
+      },
+      "meta": {}
+    },
+
+    // ── segment ───────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "segment",
+        "value_set": ["consumer", "business", "vip"],
+        "mostly": 0.999
+      },
+      "meta": {}
+    },
+
+    // ── last_order_date >= first_order_date ───────────────────────────────────
+    {
+      "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
+      "kwargs": {
+        "column_A": "last_order_date",
+        "column_B": "first_order_date",
+        "or_equal": true,
+        "mostly": 0.999
+      },
+      "meta": {"notes": "last_order_date cannot precede first_order_date."}
+    },
+
+    // ── total_orders ──────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "total_orders"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "total_orders", "min_value": 1, "max_value": null},
+      "meta": {"notes": "Customers in this table must have at least one order."}
+    },
+
+    // ── total_revenue ─────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "total_revenue"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "total_revenue", "min_value": 0.0, "max_value": null},
+      "meta": {}
+    },
+
+    // ── avg_order_value ───────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "avg_order_value", "min_value": 0.0, "max_value": null},
+      "meta": {}
+    },
+
+    // ── days_since_last_order ─────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "days_since_last_order",
+        "min_value": 0,
+        "max_value": 36500
+      },
+      "meta": {"notes": "Non-negative; cap at 100 years to catch computation errors."}
+    },
+
+    // ── is_churned consistency with days_since_last_order > 90 ───────────────
+    // GX custom expectation — approximated via proportion check:
+    // if days_since_last_order > 90 then is_churned should be true (validated in runner.py)
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "is_churned",
+        "value_set": [true, false]
+      },
+      "meta": {"notes": "Boolean guard. Cross-column churn logic verified in runner.py custom check."}
+    },
+
+    // ── computed_at ───────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "computed_at"},
+      "meta": {}
+    }
+  ]
+}

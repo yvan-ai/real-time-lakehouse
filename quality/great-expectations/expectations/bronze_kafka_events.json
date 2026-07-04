@@ -1,0 +1,122 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "bronze_kafka_events",
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.0",
+    "notes": "Bronze — raw.kafka_events. Append-only Kafka capture. Validate presence, types, and structural invariants. No business rules at this layer."
+  },
+  "expectations": [
+
+    // ── Table-level ─────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {"min_value": 1, "max_value": null},
+      "meta": {"notes": "Table must not be empty after ingestion."}
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_ordered_list",
+      "kwargs": {
+        "column_list": [
+          "event_id", "topic", "partition", "offset",
+          "event_ts", "ingested_at", "msg_key", "payload"
+        ]
+      },
+      "meta": {"notes": "Schema guard — fail if columns are added/removed/reordered."}
+    },
+
+    // ── event_id ─────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "event_id"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": {"column": "event_id"},
+      "meta": {"notes": "UUIDs generated at ingestion must be unique per row."}
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "event_id",
+        "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "meta": {"notes": "UUID v4 format."}
+    },
+
+    // ── topic ─────────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "topic"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "topic",
+        "regex": "^[a-zA-Z0-9._-]+$"
+      },
+      "meta": {"notes": "Kafka topic names: alphanumeric, dots, dashes, underscores only."}
+    },
+
+    // ── partition ─────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "partition"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "partition", "min_value": 0, "max_value": null},
+      "meta": {}
+    },
+
+    // ── offset ────────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "offset"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "offset", "min_value": 0, "max_value": null},
+      "meta": {}
+    },
+
+    // ── event_ts ──────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "event_ts"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_max_to_be_between",
+      "kwargs": {
+        "column": "event_ts",
+        "min_value": "2024-01-01T00:00:00",
+        "max_value": null
+      },
+      "meta": {"notes": "Freshness check — latest event must be after project start date."}
+    },
+
+    // ── ingested_at ───────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "ingested_at"},
+      "meta": {}
+    },
+
+    // ── payload ───────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "payload"},
+      "meta": {"notes": "Null payloads indicate a pipeline bug — Kafka messages always have a body."}
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "kwargs": {"column": "payload", "min_value": 2, "max_value": null},
+      "meta": {"notes": "Minimum valid JSON is '{}' (2 chars)."}
+    }
+  ]
+}

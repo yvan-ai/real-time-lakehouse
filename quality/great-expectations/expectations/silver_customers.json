@@ -1,0 +1,136 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "silver_customers",
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.0",
+    "notes": "Silver — silver.customers. Deduplicated customer records. Validate PK uniqueness, email format, ISO country codes, and segment values."
+  },
+  "expectations": [
+
+    // ── Table-level ─────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {"min_value": 1, "max_value": null},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_ordered_list",
+      "kwargs": {
+        "column_list": [
+          "customer_id", "email", "first_name", "last_name", "country_code",
+          "segment", "created_at", "updated_at", "_source_op", "_ingested_at"
+        ]
+      },
+      "meta": {}
+    },
+
+    // ── customer_id ───────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "customer_id"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": {"column": "customer_id"},
+      "meta": {}
+    },
+
+    // ── email ─────────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "email",
+        "regex": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+        "mostly": 0.99
+      },
+      "meta": {"notes": "Basic email format. 1% tolerance for legacy/test accounts."}
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "kwargs": {"column": "email", "min_value": 5, "max_value": 320},
+      "meta": {"notes": "RFC 5321 max email length is 320 chars."}
+    },
+
+    // ── country_code ──────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "country_code",
+        "regex": "^[A-Z]{2}$",
+        "mostly": 0.999
+      },
+      "meta": {"notes": "ISO 3166-1 alpha-2."}
+    },
+
+    // ── segment ───────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "segment",
+        "value_set": ["consumer", "business", "vip"],
+        "mostly": 0.999
+      },
+      "meta": {}
+    },
+
+    // ── created_at ────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "created_at"},
+      "meta": {}
+    },
+
+    // ── updated_at >= created_at ──────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
+      "kwargs": {
+        "column_A": "updated_at",
+        "column_B": "created_at",
+        "or_equal": true,
+        "mostly": 0.999
+      },
+      "meta": {}
+    },
+
+    // ── _source_op ────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "_source_op",
+        "value_set": ["c", "u", "d"]
+      },
+      "meta": {}
+    },
+
+    // ── _ingested_at ──────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "_ingested_at"},
+      "meta": {}
+    },
+
+    // ── first_name / last_name not empty ──────────────────────────────────────
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "kwargs": {
+        "column": "first_name",
+        "min_value": 1,
+        "max_value": 200,
+        "mostly": 0.99
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "kwargs": {
+        "column": "last_name",
+        "min_value": 1,
+        "max_value": 200,
+        "mostly": 0.99
+      },
+      "meta": {}
+    }
+  ]
+}

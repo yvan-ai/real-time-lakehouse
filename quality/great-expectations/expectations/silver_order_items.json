@@ -1,0 +1,154 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "silver_order_items",
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.0",
+    "notes": "Silver — silver.order_items. Line items parsed from CDC JSON. Validate FK integrity markers, positive quantities/prices, valid discount range, and line_total arithmetic."
+  },
+  "expectations": [
+
+    // ── Table-level ─────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {"min_value": 1, "max_value": null},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_ordered_list",
+      "kwargs": {
+        "column_list": [
+          "item_id", "order_id", "product_id", "product_name", "category",
+          "quantity", "unit_price", "discount", "line_total", "currency",
+          "order_created_at", "_ingested_at"
+        ]
+      },
+      "meta": {}
+    },
+
+    // ── item_id ───────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "item_id"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": {"column": "item_id"},
+      "meta": {}
+    },
+
+    // ── order_id ──────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "order_id"},
+      "meta": {}
+    },
+
+    // ── product_id ────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "product_id"},
+      "meta": {}
+    },
+
+    // ── quantity ──────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "quantity"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "quantity",
+        "min_value": 1,
+        "max_value": 10000
+      },
+      "meta": {"notes": "Quantity must be >= 1. Upper bound 10 000 flags data entry errors."}
+    },
+
+    // ── unit_price ────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "unit_price"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "unit_price",
+        "min_value": 0.0,
+        "max_value": null,
+        "mostly": 0.999
+      },
+      "meta": {"notes": "Free items (price=0) are valid but rare; negative prices are not."}
+    },
+
+    // ── discount ──────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "discount",
+        "min_value": 0.0,
+        "max_value": 1.0,
+        "mostly": 0.999
+      },
+      "meta": {"notes": "Fractional discount 0.0–1.0. Values outside this range are parser bugs."}
+    },
+
+    // ── line_total ────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "line_total"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "line_total",
+        "min_value": 0.0,
+        "max_value": null,
+        "mostly": 0.999
+      },
+      "meta": {}
+    },
+
+    // ── currency ──────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "currency",
+        "regex": "^[A-Z]{3}$",
+        "mostly": 0.999
+      },
+      "meta": {}
+    },
+
+    // ── order_created_at ──────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "order_created_at"},
+      "meta": {}
+    },
+
+    // ── _ingested_at ──────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "_ingested_at"},
+      "meta": {}
+    },
+
+    // ── product_name not empty ────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "kwargs": {
+        "column": "product_name",
+        "min_value": 1,
+        "max_value": 500,
+        "mostly": 0.99
+      },
+      "meta": {}
+    }
+  ]
+}

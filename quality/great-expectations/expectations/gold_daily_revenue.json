@@ -1,0 +1,151 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "gold_daily_revenue",
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.0",
+    "notes": "Gold — gold.daily_revenue. Pre-aggregated daily metrics for dashboards. Strictest layer: compound PK uniqueness, non-negative KPIs, referential arithmetic consistency."
+  },
+  "expectations": [
+
+    // ── Table-level ─────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {"min_value": 1, "max_value": null},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_ordered_list",
+      "kwargs": {
+        "column_list": [
+          "report_date", "currency", "order_count", "item_count",
+          "gross_revenue", "net_revenue", "avg_order_value",
+          "new_customers", "computed_at"
+        ]
+      },
+      "meta": {}
+    },
+
+    // ── report_date ───────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "report_date"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_max_to_be_between",
+      "kwargs": {
+        "column": "report_date",
+        "min_value": "2024-01-01",
+        "max_value": null
+      },
+      "meta": {"notes": "Latest report date must be after project go-live."}
+    },
+
+    // ── currency ──────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "currency"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "currency",
+        "regex": "^[A-Z]{3}$"
+      },
+      "meta": {}
+    },
+
+    // ── (report_date, currency) compound PK ──────────────────────────────────
+    {
+      "expectation_type": "expect_compound_columns_to_be_unique",
+      "kwargs": {"column_list": ["report_date", "currency"]},
+      "meta": {"notes": "Each (date, currency) pair must appear exactly once."}
+    },
+
+    // ── order_count ───────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "order_count"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "order_count", "min_value": 0, "max_value": null},
+      "meta": {}
+    },
+
+    // ── item_count ────────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "item_count", "min_value": 0, "max_value": null},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
+      "kwargs": {
+        "column_A": "item_count",
+        "column_B": "order_count",
+        "or_equal": true,
+        "mostly": 0.99
+      },
+      "meta": {"notes": "Items sold >= orders (each order has >= 1 item)."}
+    },
+
+    // ── gross_revenue ─────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "gross_revenue"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "gross_revenue", "min_value": 0.0, "max_value": null},
+      "meta": {}
+    },
+
+    // ── net_revenue ───────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "net_revenue"},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "net_revenue", "min_value": 0.0, "max_value": null},
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
+      "kwargs": {
+        "column_A": "gross_revenue",
+        "column_B": "net_revenue",
+        "or_equal": true,
+        "mostly": 0.999
+      },
+      "meta": {"notes": "gross_revenue >= net_revenue (discounts reduce net)."}
+    },
+
+    // ── avg_order_value ───────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "avg_order_value", "min_value": 0.0, "max_value": null},
+      "meta": {}
+    },
+
+    // ── new_customers ─────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {"column": "new_customers", "min_value": 0, "max_value": null},
+      "meta": {}
+    },
+
+    // ── computed_at ───────────────────────────────────────────────────────────
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "computed_at"},
+      "meta": {}
+    }
+  ]
+}

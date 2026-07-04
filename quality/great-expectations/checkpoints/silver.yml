@@ -1,0 +1,43 @@
+name: silver
+config_version: 1.0
+class_name: Checkpoint
+run_name_template: "%Y%m%d-%H%M%S-silver"
+template_name: null
+module_name: great_expectations.checkpoint
+
+validations:
+  - batch_request:
+      datasource_name: trino_lakehouse
+      data_connector_name: default_inferred_data_connector_name
+      data_asset_name: silver.orders
+    expectation_suite_name: silver_orders
+
+  - batch_request:
+      datasource_name: trino_lakehouse
+      data_connector_name: default_inferred_data_connector_name
+      data_asset_name: silver.customers
+    expectation_suite_name: silver_customers
+
+  - batch_request:
+      datasource_name: trino_lakehouse
+      data_connector_name: default_inferred_data_connector_name
+      data_asset_name: silver.order_items
+    expectation_suite_name: silver_order_items
+
+action_list:
+  - name: store_validation_result
+    action:
+      class_name: StoreValidationResultAction
+
+  - name: store_evaluation_params
+    action:
+      class_name: StoreEvaluationParametersAction
+
+  - name: update_data_docs
+    action:
+      class_name: UpdateDataDocsAction
+      site_names:
+        - local_site
+
+evaluation_parameters: {}
+runtime_configuration: {}
