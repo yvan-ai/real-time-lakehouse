@@ -102,7 +102,9 @@ jobs:
              infra/kubernetes/overlays/local/minio.env
 
       - name: kustomize build — local overlay
-        run: kustomize build infra/kubernetes/overlays/local > /tmp/local-manifests.yaml
+        # Render inside the workspace: the kubeconform container only mounts
+        # /github/workspace, so /tmp on the runner is not visible to it.
+        run: kustomize build infra/kubernetes/overlays/local > rendered-manifests.yaml
 
       - name: kubeconform
         uses: docker://ghcr.io/yannh/kubeconform:latest
@@ -113,7 +115,7 @@ jobs:
             -ignore-missing-schemas
             -kubernetes-version 1.29.0
             -summary
-            /tmp/local-manifests.yaml
+            rendered-manifests.yaml
 
   # ── 5. Build & push Docker images (main only) ────────────────────────────
   build-push:
