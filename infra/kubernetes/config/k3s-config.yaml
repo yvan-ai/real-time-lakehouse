@@ -1,0 +1,25 @@
+# k3s server configuration — WSL2, 16 GB RAM, max 10 GB for k3s + data stack
+# Deploy to: /etc/rancher/k3s/config.yaml before running the k3s installer.
+
+disable:
+  - traefik      # use kubectl port-forward or NodePort; avoids ~50 MB overhead
+  - servicelb    # no cloud LB needed locally; use NodePort or port-forward
+
+# Kubelet tuning: protect host memory, cap pod density
+kubelet-arg:
+  - "max-pods=110"
+  - "system-reserved=cpu=250m,memory=512Mi"
+  - "kube-reserved=cpu=250m,memory=512Mi"
+  - "eviction-hard=memory.available<512Mi,nodefs.available<5%"
+  - "eviction-soft=memory.available<1Gi,nodefs.available<10%"
+  - "eviction-soft-grace-period=memory.available=2m,nodefs.available=2m"
+
+# API server: shrink watch-cache to reduce idle RAM (~200 MB savings)
+kube-apiserver-arg:
+  - "default-watch-cache-size=100"
+  - "watch-cache-sizes=pods#100,nodes#10,services#50,configmaps#50,secrets#50"
+
+# Controller manager: slower sync = less CPU churn on an idle dev cluster
+kube-controller-manager-arg:
+  - "node-monitor-period=10s"
+  - "node-monitor-grace-period=40s"
