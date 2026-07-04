@@ -1,0 +1,54 @@
+# Strimzi KafkaConnect — runs Kafka Connect workers with the Debezium PostgreSQL connector.
+# Image is built locally via scripts/build-connect-image.sh and imported into k3s containerd.
+# imagePullPolicy defaults to IfNotPresent for a non-latest tag, so k3s uses the local image.
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaConnect
+metadata:
+  name: debezium-connect
+  namespace: streaming
+  annotations:
+    # Enables KafkaConnector CRs to manage connectors declaratively.
+    strimzi.io/use-connector-resources: "true"
+spec:
+  image: debezium-connect:3.1.0-kafka-4.2.0
+  replicas: 1
+  bootstrapServers: kafka-dev-kafka-bootstrap:9092
+  # These four fields moved to top-level spec in Strimzi v1 API.
+  groupId: debezium-connect-cluster
+  offsetStorageTopic: debezium-connect-offsets
+  configStorageTopic: debezium-connect-configs
+  statusStorageTopic: debezium-connect-status
+  config:
+    offset.storage.replication.factor: "1"
+    config.storage.replication.factor: "1"
+    status.storage.replication.factor: "1"
+    key.converter: org.apache.kafka.connect.json.JsonConverter
+    value.converter: org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable: "false"
+    value.converter.schemas.enable: "false"
+    topic.creation.enable: "false"
+    config.providers: file
+    config.providers.file.class: org.apache.kafka.common.config.provider.FileConfigProvider
+  # Strimzi v1: inject secret as env vars, resolved via ${strimzienv:VAR_NAME}.
+  # The strimzienv EnvVarConfigProvider is built into Strimzi Connect images.
+  template:
+    connectContainer:
+      env:
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: debezium-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: debezium-db-credentials
+              key: password
+  resources:
+    requests:
+      memory: 384Mi
+      cpu: 200m
+    limits:
+      memory: 768Mi
+      cpu: 1000m

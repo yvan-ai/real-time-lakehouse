@@ -1,0 +1,91 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaConnector
+metadata:
+  name: debezium-postgres
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: debezium-connect
+spec:
+  class: io.debezium.connector.postgresql.PostgresConnector
+  # Single task: PostgreSQL logical replication is inherently single-threaded per slot.
+  tasksMax: 1
+  config:
+    # ── Database connection ────────────────────────────────────────────────────
+    database.hostname: postgres.streaming.svc.cluster.local
+    database.port: "5432"
+    database.dbname: lakehouse
+    # Credentials read from the Secret mounted by KafkaConnect.externalConfiguration.
+    # The Secret must have keys 'username' and 'password'.
+    database.user: "${strimzienv:DB_USERNAME}"
+    database.password: "${strimzienv:DB_PASSWORD}"
+
+    # ── Topic routing ──────────────────────────────────────────────────────────
+    # Must match the KafkaTopic CRs already defined:
+    #   debezium.public.orders / debezium.public.customers / debezium.public.order_items
+    topic.prefix: debezium
+
+    # ── PostgreSQL logical replication ─────────────────────────────────────────
+    # pgoutput is PostgreSQL's native output plugin — no extra extension needed.
+    plugin.name: pgoutput
+    # Publication and slot must be created in PostgreSQL before starting connector.
+    # See prerequisites below.
+    publication.name: dbz_publication
+    slot.name: debezium_slot_v2
+    # Only capture these three tables.
+    table.include.list: "public.orders,public.customers,public.order_items"
+
+    # ── Decimal handling ───────────────────────────────────────────────────────
+    # Emit NUMERIC/DECIMAL as human-readable strings ("99.99") instead of
+    # base64-encoded binary bytes. Required for Flink debezium-json to parse them.
+    decimal.handling.mode: string
+
+    # ── Snapshot ───────────────────────────────────────────────────────────────
+    # Take a full initial snapshot of existing rows, then switch to streaming.
+    snapshot.mode: always
+    snapshot.isolation.mode: repeatable_read
+
+    # ── Exactly-once support ───────────────────────────────────────────────────
+    # Writes transaction begin/end events to debezium.transaction topic.
+    # Required for Flink to reconstruct transaction boundaries.
+    provide.transaction.metadata: "true"
+
+    # ── Heartbeat ─────────────────────────────────────────────────────────────
+    # Prevents PostgreSQL WAL from accumulating when monitored tables are idle.
+    # Requires a heartbeat table (see prerequisites).
+    heartbeat.interval.ms: "30000"
+    heartbeat.action.query: "UPDATE public.debezium_heartbeat SET ts_ms = NOW() WHERE id = 1"
+
+    # ── Offset management ─────────────────────────────────────────────────────
+    offset.flush.interval.ms: "5000"
+
+    # ── Tombstones ────────────────────────────────────────────────────────────
+    # Emit null-value tombstone messages on DELETE so compacted topics can
+    # eventually remove deleted-record keys.
+    tombstones.on.delete: "true"
+
+    # ── Topic creation ────────────────────────────────────────────────────────
+    # Topics are managed via KafkaTopic CRs; block connector auto-creation.
+    topic.creation.enable: "false"
+
+# ── Prerequisites (run once against the PostgreSQL instance) ──────────────────
+#
+# 1. postgresql.conf:
+#      wal_level = logical
+#      max_replication_slots = 5
+#      max_wal_senders = 5
+#
+# 2. Create the replication role (or grant to existing user):
+#      CREATE ROLE debezium WITH LOGIN REPLICATION PASSWORD '<password>';
+#      GRANT SELECT ON ALL TABLES IN SCHEMA public TO debezium;
+#
+# 3. Create publication:
+#      CREATE PUBLICATION dbz_publication
+#        FOR TABLE public.orders, public.customers, public.order_items;
+#
+# 4. Create heartbeat table:
+#      CREATE TABLE IF NOT EXISTS public.debezium_heartbeat (
+#        id   INT PRIMARY KEY DEFAULT 1,
+#        ts_ms TIMESTAMPTZ NOT NULL DEFAULT NOW()
+#      );
+#      INSERT INTO public.debezium_heartbeat(id) VALUES(1) ON CONFLICT DO NOTHING;
+#      GRANT UPDATE ON public.debezium_heartbeat TO debezium;
