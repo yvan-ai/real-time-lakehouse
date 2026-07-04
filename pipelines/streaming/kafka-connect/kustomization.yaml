@@ -3,7 +3,6 @@ kind: Kustomization
 
 namespace: streaming
 
-resources:
   # debezium-db-credentials.yaml (ExternalSecret) excluded — requires ESO CRDs.
   # Create the secret manually before applying:
   #   kubectl create secret generic debezium-db-credentials -n streaming \
@@ -11,11 +10,12 @@ resources:
   #     --from-literal=password=<debezium_password>
   # Uncomment the line below when ESO is installed:
   # - debezium-db-credentials.yaml
-  - kafka-connect.yaml
-  - debezium-postgres.yaml
+resources:
+- kafka-connect.yaml
+- debezium-postgres.yaml
 
 # CD pipeline updates this tag via `kustomize edit set image`.
 images:
-  - name: kafka-connect-lakehouse
-    newName: ghcr.io/yvan-ai/real-time-lakehouse/kafka-connect-lakehouse
-    newTag: latest
+- name: kafka-connect-lakehouse
+  newName: ghcr.io/yvan-ai/real-time-lakehouse/kafka-connect-lakehouse
+  newTag: sha-007b042

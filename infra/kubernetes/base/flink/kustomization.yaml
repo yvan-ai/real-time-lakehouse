@@ -4,9 +4,9 @@ kind: Kustomization
 namespace: flink
 
 resources:
-  - namespace.yaml
-  - flink-rbac.yaml
-  - flink-deployment.yaml
+- namespace.yaml
+- flink-rbac.yaml
+- flink-deployment.yaml
   # minio-credentials.yaml (ExternalSecret) excluded — requires ESO CRDs.
   # Create the secret manually before applying:
   #   kubectl create secret generic minio-credentials-flink -n flink \
@@ -17,6 +17,6 @@ resources:
 
 # CD pipeline updates this tag via `kustomize edit set image`.
 images:
-  - name: flink-order-revenue
-    newName: ghcr.io/yvan-ai/real-time-lakehouse/flink-order-revenue
-    newTag: latest
+- name: flink-order-revenue
+  newName: ghcr.io/yvan-ai/real-time-lakehouse/flink-order-revenue
+  newTag: sha-007b042
