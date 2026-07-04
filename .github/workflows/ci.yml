@@ -1,0 +1,168 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+  PYTHON_VERSION: "3.11"
+
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+
+  # ── 1. YAML lint ──────────────────────────────────────────────────────────
+  lint-yaml:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: yamllint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_file: .yamllint
+
+  # ── 2. Python lint + typecheck ────────────────────────────────────────────
+  lint-python:
+    name: Python Lint & Types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install linters
+        run: pip install ruff mypy
+
+      - name: Ruff lint
+        run: ruff check --output-format=github .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Mypy
+        run: |
+          pip install -r requirements-test.txt
+          mypy
+
+  # ── 3. Unit tests (pytest + local PySpark) ────────────────────────────────
+  test-python:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      - name: Run pytest
+        run: |
+          pytest quality/tests \
+            -v \
+            --tb=short \
+            --cov \
+            --cov-report=term-missing
+
+  # ── 4. Validate Kubernetes manifests ─────────────────────────────────────
+  validate-manifests:
+    name: Validate K8s Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Provide placeholder MinIO env for secretGenerator
+        # minio.env is gitignored (real credentials); the example file is
+        # enough to render manifests for validation.
+        run: |
+          cp infra/kubernetes/overlays/local/minio.env.example \
+             infra/kubernetes/overlays/local/minio.env
+
+      - name: kustomize build — local overlay
+        run: kustomize build infra/kubernetes/overlays/local > /tmp/local-manifests.yaml
+
+      - name: kubeconform
+        uses: docker://ghcr.io/yannh/kubeconform:latest
+        with:
+          entrypoint: /kubeconform
+          args: >-
+            -strict
+            -ignore-missing-schemas
+            -kubernetes-version 1.29.0
+            -summary
+            /tmp/local-manifests.yaml
+
+  # ── 5. Build & push Docker images (main only) ────────────────────────────
+  build-push:
+    name: Build & Push — ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    needs: [lint-yaml, lint-python, test-python, validate-manifests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: flink-order-revenue
+            context: pipelines/streaming/flink-jobs/order-revenue
+            dockerfile: pipelines/streaming/flink-jobs/order-revenue/Dockerfile
+          - name: kafka-connect-lakehouse
+            context: pipelines/streaming/kafka-connect
+            dockerfile: pipelines/streaming/kafka-connect/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.name }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
