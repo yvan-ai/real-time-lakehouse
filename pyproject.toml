@@ -1,0 +1,59 @@
+[project]
+name = "real-time-lakehouse"
+version = "0.1.0"
+description = "Real-time lakehouse: Kafka + Debezium CDC + Flink + Spark + Iceberg + Trino on Kubernetes"
+authors = [{ name = "Yvan Kenne", email = "kenneyvan65@gmail.com" }]
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+
+# ── Ruff — lint + format ──────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["quality/great-expectations/uncommitted"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+]
+
+[tool.ruff.lint.isort]
+# Shared module lives next to the job files (flat ConfigMap layout), so ruff
+# cannot infer it is first-party from the directory structure alone.
+known-first-party = ["lakehouse_common"]
+
+[tool.ruff.lint.per-file-ignores]
+# Jobs are mounted as flat files in the batch ConfigMap; sys.path tweak in
+# conftest.py must precede the lakehouse_common imports.
+"quality/tests/**" = ["E402"]
+
+# ── Mypy — static typing ──────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.11"
+files = ["pipelines", "scripts", "quality/tests"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+# Jobs are standalone scripts (not a package) — silence duplicate-module errors
+explicit_package_bases = true
+mypy_path = "pipelines/batch/spark-jobs"
+
+# ── Pytest ────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["quality/tests"]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["pipelines"]
+
+[tool.coverage.report]
+show_missing = true

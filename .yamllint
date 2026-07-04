@@ -1,0 +1,15 @@
+# Shared yamllint config — used by CI, pre-commit, Makefile and scripts/test.sh
+extends: default
+
+rules:
+  line-length:
+    max: 160
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false          # allow the `on:` key in GitHub workflows
+  comments:
+    min-spaces-from-content: 1
+  document-start: disable      # Kubernetes manifests conventionally omit `---`
+
+ignore: |
+  infra/kubernetes/base/monitoring/grafana.yaml
