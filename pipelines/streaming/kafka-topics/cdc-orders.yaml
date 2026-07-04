@@ -1,0 +1,23 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: cdc-public-orders
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: kafka-dev
+spec:
+  topicName: debezium.public.orders
+  partitions: 3
+  replicas: 1
+  config:
+    # compact+delete: keeps latest value per PK key, eventually removes old compacted segments.
+    # Flink can rebuild state from a compacted topic after checkpoint restore.
+    cleanup.policy: compact,delete
+    # Debezium writes keys as the PK → hash-based default partitioner distributes evenly.
+    # All events for a given order_id land on the same partition → per-record ordering guaranteed.
+    compression.type: snappy
+    retention.ms: "604800000"        # 7 days
+    delete.retention.ms: "86400000"  # tombstone visible for 1 day before purge
+    min.compaction.lag.ms: "0"
+    segment.bytes: "67108864"        # 64 MB — smaller segments allow faster compaction in dev
+    min.insync.replicas: "1"

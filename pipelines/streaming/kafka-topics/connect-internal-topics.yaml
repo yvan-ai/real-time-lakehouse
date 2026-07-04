@@ -1,0 +1,52 @@
+# Kafka Connect internal topics — must exist before KafkaConnect starts.
+# Partition counts and replication factors match the single-broker dev cluster.
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: debezium-connect-offsets
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: kafka-dev
+spec:
+  topicName: debezium-connect-offsets
+  # 3 partitions gives parallelism headroom; Kafka Connect requires at least 1.
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: compact
+    segment.bytes: "67108864"
+    min.insync.replicas: "1"
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: debezium-connect-configs
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: kafka-dev
+spec:
+  topicName: debezium-connect-configs
+  # Must be exactly 1 partition — Kafka Connect requirement.
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: compact
+    segment.bytes: "67108864"
+    min.insync.replicas: "1"
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: debezium-connect-status
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: kafka-dev
+spec:
+  topicName: debezium-connect-status
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: compact
+    segment.bytes: "67108864"
+    min.insync.replicas: "1"

@@ -1,0 +1,20 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: gold-order-revenue-1m
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: kafka-dev
+spec:
+  # Written by Flink order-revenue-job: one record per closed 1-minute window.
+  topicName: gold.order-revenue-1m
+  # Single partition — window results are naturally ordered by window_end;
+  # no key-based distribution needed for downstream consumers.
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    compression.type: snappy
+    retention.ms: "2592000000"   # 30 days — gold layer for BI consumption
+    segment.bytes: "67108864"
+    min.insync.replicas: "1"

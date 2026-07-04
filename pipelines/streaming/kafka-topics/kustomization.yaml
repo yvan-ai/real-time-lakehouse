@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: streaming
+
+resources:
+  - cdc-orders.yaml
+  - cdc-customers.yaml
+  - cdc-order-items.yaml
+  - debezium-transaction.yaml
+  - raw-events.yaml
+  - dlq-cdc.yaml
+  - connect-internal-topics.yaml
+  - gold-order-revenue.yaml

@@ -1,0 +1,19 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: debezium-transaction
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: kafka-dev
+spec:
+  # Debezium writes transaction begin/end metadata here when
+  # provide.transaction.metadata=true — required for exactly-once in Flink.
+  topicName: debezium.transaction
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    compression.type: snappy
+    retention.ms: "604800000"   # 7 days — must outlive longest Flink checkpoint interval
+    segment.bytes: "67108864"
+    min.insync.replicas: "1"

@@ -1,0 +1,20 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dlq-cdc
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: kafka-dev
+spec:
+  # Dead-letter queue for CDC events that fail Flink processing (schema mismatch,
+  # deserialization errors, etc.). Partitions mirror the source CDC topics (3)
+  # so failed events can be correlated back to their origin partition.
+  topicName: dlq.cdc
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    compression.type: snappy
+    retention.ms: "604800000"   # 7 days — time to investigate and replay
+    segment.bytes: "67108864"
+    min.insync.replicas: "1"

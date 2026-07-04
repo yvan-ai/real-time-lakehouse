@@ -1,0 +1,21 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: raw-events
+  namespace: streaming
+  labels:
+    strimzi.io/cluster: kafka-dev
+spec:
+  # Generic application events (clickstream, app telemetry, etc.) that are not
+  # tied to a database row. No compaction — consumers read forward from offset.
+  topicName: raw.events
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    compression.type: snappy
+    # Short retention for dev; bump to 7 days (604800000) in staging/prod.
+    retention.ms: "86400000"         # 24 hours
+    retention.bytes: "536870912"     # 512 MB per partition ceiling
+    segment.bytes: "67108864"
+    min.insync.replicas: "1"
