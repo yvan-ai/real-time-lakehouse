@@ -1,0 +1,5 @@
+# Test-only dependencies — installed by CI (see .github/workflows/ci.yml)
+# and by `make setup`.
+pyspark==3.5.3
+pytest>=8.0,<9
+pytest-cov>=5.0
