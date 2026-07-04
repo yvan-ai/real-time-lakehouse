@@ -1,0 +1,47 @@
+# Data contract — orders CDC stream
+# Governs the Debezium topics feeding the lakehouse and the Silver tables
+# derived from them. Payload field definitions: ../schemas/*.schema.json
+
+contract:
+  name: orders-cdc
+  version: 1.0.0
+  owner: data-platform (Yvan Kenne)
+  status: active
+
+source:
+  system: postgresql (database lakehouse, schema public)
+  tables: [orders, customers, order_items]
+  capture: debezium 3.1 / pgoutput — publication dbz_publication
+
+interface:
+  topics:
+    - name: debezium.public.orders
+      schema: ../schemas/order-cdc.schema.json
+    - name: debezium.public.customers
+      schema: ../schemas/customer-cdc.schema.json
+    - name: debezium.public.order_items
+      schema: ../schemas/order-item-cdc.schema.json
+  envelope: debezium-json, schema-include=false
+  key: primary key of the source table (JSON)
+  dead_letter_topic: dlq.cdc
+
+guarantees:
+  delivery: at-least-once into Kafka; exactly-once in Flink aggregates
+  ordering: per-partition, keyed by primary key
+  retention: 7 days on CDC topics (Bronze Iceberg tables keep full history)
+  schema_evolution:
+    backward_compatible: [add optional field]
+    breaking_requires_new_major: [remove field, rename field, change type]
+
+slas:
+  freshness:
+    streaming_aggregates: "< 2 minutes end-to-end (1-min window + watermark delay)"
+    silver_tables: "next batch run (on demand or scheduled)"
+  quality:
+    - suite: bronze — quality/great-expectations/expectations/bronze_cdc_orders.json
+    - suite: silver — quality/great-expectations/expectations/silver_orders.json
+    - custom: churn-flag consistency check (gold layer)
+
+consumers:
+  - flink job order-revenue (hot path)
+  - spark batch pipeline (bronze ingest)

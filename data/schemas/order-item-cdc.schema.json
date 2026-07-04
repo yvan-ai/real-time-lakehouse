@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yvan-ai/real-time-lakehouse/data/schemas/order-item-cdc.schema.json",
+  "title": "Order item CDC payload",
+  "description": "Row image carried in the Debezium envelope's before/after fields for public.order_items",
+  "type": "object",
+  "required": ["item_id", "order_id", "product_id", "quantity", "unit_price", "created_at"],
+  "properties": {
+    "item_id": { "type": "integer", "description": "Primary key (BIGSERIAL)" },
+    "order_id": { "type": "integer", "description": "FK to public.orders" },
+    "product_id": { "type": "integer" },
+    "quantity": { "type": "integer", "minimum": 1 },
+    "unit_price": {
+      "type": ["number", "string"],
+      "description": "NUMERIC(10,2) — may arrive as string depending on decimal.handling.mode"
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

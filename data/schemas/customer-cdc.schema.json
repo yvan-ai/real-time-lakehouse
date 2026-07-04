@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yvan-ai/real-time-lakehouse/data/schemas/customer-cdc.schema.json",
+  "title": "Customer CDC payload",
+  "description": "Row image carried in the Debezium envelope's before/after fields for public.customers",
+  "type": "object",
+  "required": ["customer_id", "name", "email", "created_at", "updated_at"],
+  "properties": {
+    "customer_id": { "type": "integer", "description": "Primary key (BIGSERIAL)" },
+    "name": { "type": "string", "maxLength": 255 },
+    "email": { "type": "string", "format": "email", "maxLength": 255 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
