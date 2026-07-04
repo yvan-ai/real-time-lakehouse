@@ -1,0 +1,4 @@
+# Normalise line endings — shell scripts and k8s manifests require LF
+* text=auto eol=lf
+*.png binary
+*.jar binary
