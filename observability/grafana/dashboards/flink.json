@@ -1,0 +1,184 @@
+{
+  "uid": "flink-lakehouse",
+  "title": "Flink — Lakehouse",
+  "description": "PyFlink order-revenue job metrics via PrometheusReporter",
+  "tags": ["flink", "lakehouse", "streaming"],
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Job Uptime",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "flink_jobmanager_job_uptime / 1000", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 60, "color": "green"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total Restarts",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "flink_jobmanager_job_numrestarts", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 1, "color": "yellow"},
+            {"value": 5, "color": "red"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Last Checkpoint Duration",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "flink_jobmanager_job_lastCheckpointDuration", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 30000, "color": "yellow"},
+            {"value": 60000, "color": "red"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Failed Checkpoints (total)",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "flink_jobmanager_job_numberOfFailedCheckpoints", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 1, "color": "red"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Records In/Out per Second",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {
+          "expr": "sum by (job_name) (rate(flink_taskmanager_job_task_numRecordsIn[1m]))",
+          "legendFormat": "records in — {{job_name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (job_name) (rate(flink_taskmanager_job_task_numRecordsOut[1m]))",
+          "legendFormat": "records out — {{job_name}}",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "rps", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Task Busy vs Backpressure (%)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [
+        {
+          "expr": "flink_taskmanager_job_task_busyTimeMsPerSecond / 10",
+          "legendFormat": "busy — {{task_name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "flink_taskmanager_job_task_backPressuredTimeMsPerSecond / 10",
+          "legendFormat": "backpressure — {{task_name}}",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": {"mode": "palette-classic"}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "JVM Heap Usage",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "targets": [
+        {
+          "expr": "flink_taskmanager_Status_JVM_Memory_Heap_Used",
+          "legendFormat": "heap used — {{kubernetes_pod_name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "flink_taskmanager_Status_JVM_Memory_Heap_Max",
+          "legendFormat": "heap max — {{kubernetes_pod_name}}",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "decbytes", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Checkpoint Size (bytes)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "targets": [
+        {
+          "expr": "flink_jobmanager_job_lastCheckpointSize",
+          "legendFormat": "checkpoint size",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "decbytes", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    }
+  ]
+}

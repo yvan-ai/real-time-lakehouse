@@ -1,0 +1,233 @@
+---
+# ── ConfigMap — datasource provisioning ──────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.monitoring.svc.cluster.local:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: 15s
+          httpMethod: POST
+
+---
+# ── ConfigMap — dashboard provider ────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: monitoring
+data:
+  all.yml: |
+    apiVersion: 1
+    providers:
+      - name: lakehouse
+        orgId: 1
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+# ── ConfigMap — Kafka dashboard ───────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-kafka
+  namespace: monitoring
+  labels:
+    grafana-dashboard: "true"
+data:
+  kafka.json: |
+    {
+      "uid": "kafka-lakehouse",
+      "title": "Kafka — Lakehouse",
+      "tags": ["kafka", "lakehouse"],
+      "schemaVersion": 36,
+      "refresh": "30s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {"id":1,"type":"stat","title":"Active Controller","gridPos":{"h":4,"w":6,"x":0,"y":0},"targets":[{"expr":"sum(kafka_controller_kafkacontroller_activecontrollercount)","refId":"A"}],"fieldConfig":{"defaults":{"thresholds":{"mode":"absolute","steps":[{"value":null,"color":"red"},{"value":1,"color":"green"},{"value":2,"color":"red"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":2,"type":"stat","title":"Under-replicated Partitions","gridPos":{"h":4,"w":6,"x":6,"y":0},"targets":[{"expr":"sum(kafka_server_replicamanager_underreplicatedpartitions)","refId":"A"}],"fieldConfig":{"defaults":{"thresholds":{"mode":"absolute","steps":[{"value":null,"color":"green"},{"value":1,"color":"red"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":3,"type":"stat","title":"Total Consumer Lag","gridPos":{"h":4,"w":12,"x":12,"y":0},"targets":[{"expr":"sum(kafka_consumergroup_lag)","refId":"A"}],"fieldConfig":{"defaults":{"unit":"short","thresholds":{"mode":"absolute","steps":[{"value":null,"color":"green"},{"value":1000,"color":"yellow"},{"value":10000,"color":"red"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"area"}},
+        {"id":4,"type":"timeseries","title":"Messages In/Out per Second","gridPos":{"h":8,"w":12,"x":0,"y":4},"targets":[{"expr":"sum(rate(kafka_server_brokertopicmetrics_messagesin_total[5m]))","legendFormat":"in","refId":"A"},{"expr":"sum(rate(kafka_server_brokertopicmetrics_messagesout_total[5m]))","legendFormat":"out","refId":"B"}],"fieldConfig":{"defaults":{"unit":"mps","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"list","placement":"bottom"}}},
+        {"id":5,"type":"timeseries","title":"Network Throughput (Bytes)","gridPos":{"h":8,"w":12,"x":12,"y":4},"targets":[{"expr":"sum(rate(kafka_server_brokertopicmetrics_bytesin_total[5m]))","legendFormat":"bytes in","refId":"A"},{"expr":"sum(rate(kafka_server_brokertopicmetrics_bytesout_total[5m]))","legendFormat":"bytes out","refId":"B"}],"fieldConfig":{"defaults":{"unit":"Bps","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"list","placement":"bottom"}}},
+        {"id":6,"type":"timeseries","title":"Consumer Group Lag by Topic","gridPos":{"h":8,"w":24,"x":0,"y":12},"targets":[{"expr":"sum by (consumergroup,topic) (kafka_consumergroup_lag)","legendFormat":"{{consumergroup}} / {{topic}}","refId":"A"}],"fieldConfig":{"defaults":{"unit":"short","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"right","calcs":["lastNotNull","max"]}}}
+      ]
+    }
+
+---
+# ── ConfigMap — Flink dashboard ───────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-flink
+  namespace: monitoring
+  labels:
+    grafana-dashboard: "true"
+data:
+  flink.json: |
+    {
+      "uid": "flink-lakehouse",
+      "title": "Flink — Lakehouse",
+      "tags": ["flink", "lakehouse"],
+      "schemaVersion": 36,
+      "refresh": "15s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {"id":1,"type":"stat","title":"Job Uptime","gridPos":{"h":4,"w":6,"x":0,"y":0},"targets":[{"expr":"flink_jobmanager_job_uptime / 1000","refId":"A"}],"fieldConfig":{"defaults":{"unit":"s","thresholds":{"mode":"absolute","steps":[{"value":null,"color":"red"},{"value":60,"color":"green"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":2,"type":"stat","title":"Restarts","gridPos":{"h":4,"w":6,"x":6,"y":0},"targets":[{"expr":"flink_jobmanager_job_numrestarts","refId":"A"}],"fieldConfig":{"defaults":{"thresholds":{"mode":"absolute","steps":[{"value":null,"color":"green"},{"value":1,"color":"yellow"},{"value":5,"color":"red"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":3,"type":"stat","title":"Last Checkpoint Duration","gridPos":{"h":4,"w":6,"x":12,"y":0},"targets":[{"expr":"flink_jobmanager_job_lastCheckpointDuration","refId":"A"}],"fieldConfig":{"defaults":{"unit":"ms","thresholds":{"mode":"absolute","steps":[{"value":null,"color":"green"},{"value":30000,"color":"yellow"},{"value":60000,"color":"red"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":4,"type":"stat","title":"Failed Checkpoints","gridPos":{"h":4,"w":6,"x":18,"y":0},"targets":[{"expr":"flink_jobmanager_job_numberOfFailedCheckpoints","refId":"A"}],"fieldConfig":{"defaults":{"thresholds":{"mode":"absolute","steps":[{"value":null,"color":"green"},{"value":1,"color":"red"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":5,"type":"timeseries","title":"Records In/Out per Second","gridPos":{"h":8,"w":12,"x":0,"y":4},"targets":[{"expr":"sum by (job_name) (rate(flink_taskmanager_job_task_numRecordsIn[1m]))","legendFormat":"in — {{job_name}}","refId":"A"},{"expr":"sum by (job_name) (rate(flink_taskmanager_job_task_numRecordsOut[1m]))","legendFormat":"out — {{job_name}}","refId":"B"}],"fieldConfig":{"defaults":{"unit":"rps","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"list","placement":"bottom"}}},
+        {"id":6,"type":"timeseries","title":"Task Busy vs Backpressure (%)","gridPos":{"h":8,"w":12,"x":12,"y":4},"targets":[{"expr":"flink_taskmanager_job_task_busyTimeMsPerSecond / 10","legendFormat":"busy — {{task_name}}","refId":"A"},{"expr":"flink_taskmanager_job_task_backPressuredTimeMsPerSecond / 10","legendFormat":"backpressure — {{task_name}}","refId":"B"}],"fieldConfig":{"defaults":{"unit":"percent","min":0,"max":100,"color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"list","placement":"bottom"}}},
+        {"id":7,"type":"timeseries","title":"JVM Heap Usage","gridPos":{"h":8,"w":12,"x":0,"y":12},"targets":[{"expr":"flink_taskmanager_Status_JVM_Memory_Heap_Used","legendFormat":"used — {{kubernetes_pod_name}}","refId":"A"},{"expr":"flink_taskmanager_Status_JVM_Memory_Heap_Max","legendFormat":"max — {{kubernetes_pod_name}}","refId":"B"}],"fieldConfig":{"defaults":{"unit":"decbytes","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"list","placement":"bottom"}}},
+        {"id":8,"type":"timeseries","title":"Checkpoint Size","gridPos":{"h":8,"w":12,"x":12,"y":12},"targets":[{"expr":"flink_jobmanager_job_lastCheckpointSize","legendFormat":"size","refId":"A"}],"fieldConfig":{"defaults":{"unit":"decbytes","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"list","placement":"bottom"}}}
+      ]
+    }
+
+---
+# ── ConfigMap — Kubernetes dashboard ─────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-kubernetes
+  namespace: monitoring
+  labels:
+    grafana-dashboard: "true"
+data:
+  kubernetes.json: |
+    {
+      "uid": "kubernetes-lakehouse",
+      "title": "Kubernetes — Lakehouse Cluster",
+      "tags": ["kubernetes", "lakehouse"],
+      "schemaVersion": 36,
+      "refresh": "30s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {"id":1,"type":"stat","title":"Running Pods","gridPos":{"h":4,"w":4,"x":0,"y":0},"targets":[{"expr":"count(kube_pod_status_phase{phase=\"Running\"})","refId":"A"}],"fieldConfig":{"defaults":{"thresholds":{"mode":"absolute","steps":[{"value":null,"color":"green"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":2,"type":"stat","title":"Pods Not Ready","gridPos":{"h":4,"w":4,"x":4,"y":0},"targets":[{"expr":"count(kube_pod_status_ready{condition=\"false\"} == 1) or vector(0)","refId":"A"}],"fieldConfig":{"defaults":{"thresholds":{"mode":"absolute","steps":[{"value":null,"color":"green"},{"value":1,"color":"red"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":3,"type":"stat","title":"Node Memory Available","gridPos":{"h":4,"w":8,"x":8,"y":0},"targets":[{"expr":"avg(node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100","refId":"A"}],"fieldConfig":{"defaults":{"unit":"percent","thresholds":{"mode":"absolute","steps":[{"value":null,"color":"red"},{"value":15,"color":"yellow"},{"value":30,"color":"green"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":4,"type":"stat","title":"Node CPU Idle","gridPos":{"h":4,"w":8,"x":16,"y":0},"targets":[{"expr":"avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100","refId":"A"}],"fieldConfig":{"defaults":{"unit":"percent","thresholds":{"mode":"absolute","steps":[{"value":null,"color":"red"},{"value":10,"color":"yellow"},{"value":30,"color":"green"}]}}},"options":{"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"}},
+        {"id":5,"type":"timeseries","title":"CPU by Namespace","gridPos":{"h":8,"w":12,"x":0,"y":4},"targets":[{"expr":"sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\"}[5m]))","legendFormat":"{{namespace}}","refId":"A"}],"fieldConfig":{"defaults":{"unit":"cores","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"right","calcs":["lastNotNull","mean"]}}},
+        {"id":6,"type":"timeseries","title":"Memory by Namespace","gridPos":{"h":8,"w":12,"x":12,"y":4},"targets":[{"expr":"sum by (namespace) (container_memory_working_set_bytes{container!=\"\"})","legendFormat":"{{namespace}}","refId":"A"}],"fieldConfig":{"defaults":{"unit":"decbytes","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"right","calcs":["lastNotNull","max"]}}},
+        {"id":7,"type":"timeseries","title":"Pod Restarts (last hour)","gridPos":{"h":8,"w":12,"x":0,"y":12},"targets":[{"expr":"topk(10, increase(kube_pod_container_status_restarts_total[1h]))","legendFormat":"{{namespace}}/{{pod}}","refId":"A"}],"fieldConfig":{"defaults":{"unit":"short","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"right","calcs":["lastNotNull"]}}},
+        {"id":8,"type":"timeseries","title":"Node Memory Over Time","gridPos":{"h":8,"w":12,"x":12,"y":12},"targets":[{"expr":"node_memory_MemAvailable_bytes","legendFormat":"available — {{instance}}","refId":"A"},{"expr":"node_memory_MemTotal_bytes","legendFormat":"total — {{instance}}","refId":"B"}],"fieldConfig":{"defaults":{"unit":"decbytes","color":{"mode":"palette-classic"}}},"options":{"tooltip":{"mode":"multi"},"legend":{"displayMode":"list","placement":"bottom"}}}
+      ]
+    }
+
+---
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+        runAsNonRoot: true
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.4.2
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: lakehouse   # override via secret in production
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+            - name: GF_PATHS_DATA
+              value: /var/lib/grafana
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 3000
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboard-kafka
+              mountPath: /var/lib/grafana/dashboards/kafka.json
+              subPath: kafka.json
+            - name: dashboard-flink
+              mountPath: /var/lib/grafana/dashboards/flink.json
+              subPath: flink.json
+            - name: dashboard-kubernetes
+              mountPath: /var/lib/grafana/dashboards/kubernetes.json
+              subPath: kubernetes.json
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 200m
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboard-kafka
+          configMap:
+            name: grafana-dashboard-kafka
+        - name: dashboard-flink
+          configMap:
+            name: grafana-dashboard-flink
+        - name: dashboard-kubernetes
+          configMap:
+            name: grafana-dashboard-kubernetes
+
+---
+# ── Service ───────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+spec:
+  selector:
+    app.kubernetes.io/name: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000

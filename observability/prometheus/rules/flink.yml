@@ -1,0 +1,84 @@
+groups:
+  - name: flink.rules
+    interval: 30s
+    rules:
+
+      # ── Recording rules ──────────────────────────────────────────────────
+      - record: flink:records_in:rate1m
+        expr: >
+          sum by (job_name) (
+            rate(flink_taskmanager_job_task_numRecordsIn[1m])
+          )
+
+      - record: flink:records_out:rate1m
+        expr: >
+          sum by (job_name) (
+            rate(flink_taskmanager_job_task_numRecordsOut[1m])
+          )
+
+      - record: flink:heap_usage_ratio
+        expr: >
+          flink_taskmanager_Status_JVM_Memory_Heap_Used
+          / flink_taskmanager_Status_JVM_Memory_Heap_Max
+
+      # ── Alerts ──────────────────────────────────────────────────────────
+      - alert: FlinkJobDown
+        expr: absent(flink_jobmanager_job_uptime)
+        for: 2m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Flink job metrics missing"
+          description: "No uptime metric found — job may be down or JobManager unreachable."
+
+      - alert: FlinkJobRestartingFrequently
+        expr: increase(flink_jobmanager_job_numrestarts[15m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Flink job {{ $labels.job_name }} restarting frequently"
+          description: "{{ $value }} restart(s) in the last 15 minutes."
+
+      - alert: FlinkCheckpointDurationHigh
+        expr: flink_jobmanager_job_lastCheckpointDuration > 60000
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Flink checkpoint taking too long for {{ $labels.job_name }}"
+          description: "Last checkpoint duration: {{ $value }}ms (threshold 60 000ms)."
+
+      - alert: FlinkCheckpointFailed
+        expr: increase(flink_jobmanager_job_numberOfFailedCheckpoints[10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Flink checkpoint failed for {{ $labels.job_name }}"
+          description: "{{ $value }} checkpoint failure(s) in the last 10 minutes."
+
+      - alert: FlinkHeapMemoryHigh
+        expr: flink:heap_usage_ratio > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Flink TaskManager heap usage high on {{ $labels.kubernetes_pod_name }}"
+          description: "Heap usage at {{ $value | humanizePercentage }}."
+
+      - alert: FlinkBackpressureHigh
+        expr: >
+          flink_taskmanager_job_task_backPressuredTimeMsPerSecond / 1000 > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Flink task {{ $labels.task_name }} under backpressure"
+          description: "Backpressure ratio: {{ $value | humanizePercentage }} of the time."

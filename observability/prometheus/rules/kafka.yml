@@ -1,0 +1,76 @@
+groups:
+  - name: kafka.rules
+    interval: 30s
+    rules:
+
+      # ── Recording rules ──────────────────────────────────────────────────
+      - record: kafka:messages_in:rate5m
+        expr: >
+          sum without(topic) (
+            rate(kafka_server_brokertopicmetrics_messagesin_total[5m])
+          )
+
+      - record: kafka:bytes_in:rate5m
+        expr: >
+          sum without(topic) (
+            rate(kafka_server_brokertopicmetrics_bytesin_total[5m])
+          )
+
+      - record: kafka:bytes_out:rate5m
+        expr: >
+          sum without(topic) (
+            rate(kafka_server_brokertopicmetrics_bytesout_total[5m])
+          )
+
+      # ── Alerts ──────────────────────────────────────────────────────────
+      - alert: KafkaNoActiveController
+        expr: sum(kafka_controller_kafkacontroller_activecontrollercount) != 1
+        for: 2m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Kafka has no active controller"
+          description: "Expected exactly 1 active controller, got {{ $value }}."
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_server_replicamanager_underreplicatedpartitions > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Kafka under-replicated partitions on {{ $labels.kubernetes_pod_name }}"
+          description: "{{ $value }} under-replicated partition(s) detected."
+
+      - alert: KafkaOfflinePartitions
+        expr: kafka_controller_kafkacontroller_offlinepartitionscount > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Kafka has offline partitions"
+          description: "{{ $value }} offline partition(s). Data may be unavailable."
+
+      - alert: KafkaConsumerGroupHighLag
+        expr: kafka_consumergroup_lag > 10000
+        for: 10m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "High consumer lag for group {{ $labels.consumergroup }}"
+          description: >
+            Consumer group {{ $labels.consumergroup }} topic {{ $labels.topic }}
+            partition {{ $labels.partition }} lag is {{ $value }}.
+
+      - alert: KafkaBrokerDown
+        expr: up{job="kafka"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Kafka broker {{ $labels.kubernetes_pod_name }} is down"
+          description: "Prometheus cannot scrape Kafka broker metrics."

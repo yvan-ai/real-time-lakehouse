@@ -1,0 +1,185 @@
+{
+  "uid": "kubernetes-lakehouse",
+  "title": "Kubernetes — Lakehouse Cluster",
+  "description": "Pod, node, and namespace resource metrics for the lakehouse platform",
+  "tags": ["kubernetes", "lakehouse", "infrastructure"],
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(kube_pod_info, namespace)",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "label": "Namespace"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Running Pods",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "targets": [{
+        "expr": "count(kube_pod_status_phase{phase=\"Running\", namespace=~\"$namespace\"})",
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}]}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Pods Not Ready",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "targets": [{
+        "expr": "count(kube_pod_status_ready{condition=\"false\", namespace=~\"$namespace\"} == 1) or vector(0)",
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 1, "color": "red"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Node Memory Available",
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 0},
+      "targets": [{
+        "expr": "avg(node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 15, "color": "yellow"},
+            {"value": 30, "color": "green"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Node CPU Idle",
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 0},
+      "targets": [{
+        "expr": "avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100",
+        "refId": "A"
+      }],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 10, "color": "yellow"},
+            {"value": 30, "color": "green"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "CPU Usage by Namespace",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [{
+        "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\", namespace=~\"$namespace\"}[5m]))",
+        "legendFormat": "{{namespace}}",
+        "refId": "A"
+      }],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "mean"]}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "cores", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Memory Usage by Namespace",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{
+        "expr": "sum by (namespace) (container_memory_working_set_bytes{container!=\"\", namespace=~\"$namespace\"})",
+        "legendFormat": "{{namespace}}",
+        "refId": "A"
+      }],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"]}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "decbytes", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Pod Restarts (last hour)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "targets": [{
+        "expr": "topk(10, increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\"}[1h]))",
+        "legendFormat": "{{namespace}}/{{pod}}",
+        "refId": "A"
+      }],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "short", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Node Memory Available Over Time",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "targets": [{
+        "expr": "node_memory_MemAvailable_bytes",
+        "legendFormat": "available — {{instance}}",
+        "refId": "A"
+      },
+      {
+        "expr": "node_memory_MemTotal_bytes",
+        "legendFormat": "total — {{instance}}",
+        "refId": "B"
+      }],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "decbytes", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    }
+  ]
+}

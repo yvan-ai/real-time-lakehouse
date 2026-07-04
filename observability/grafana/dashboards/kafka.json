@@ -1,0 +1,183 @@
+{
+  "uid": "kafka-lakehouse",
+  "title": "Kafka — Lakehouse",
+  "description": "Strimzi Kafka broker and consumer group metrics",
+  "tags": ["kafka", "lakehouse", "streaming"],
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "type": "constant",
+        "current": {"value": "streaming"},
+        "hide": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active Controller",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(kafka_controller_kafkacontroller_activecontrollercount)", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 1, "color": "green"},
+            {"value": 2, "color": "red"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Under-replicated Partitions",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "targets": [{"expr": "sum(kafka_server_replicamanager_underreplicatedpartitions)", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 1, "color": "red"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Offline Partitions",
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "targets": [{"expr": "sum(kafka_controller_kafkacontroller_offlinepartitionscount)", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 1, "color": "red"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total Consumer Lag",
+      "gridPos": {"h": 4, "w": 12, "x": 12, "y": 0},
+      "targets": [{"expr": "sum(kafka_consumergroup_lag)", "legendFormat": "total lag", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 1000, "color": "yellow"},
+            {"value": 10000, "color": "red"}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Messages In/Out per Second",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {
+          "expr": "sum(rate(kafka_server_brokertopicmetrics_messagesin_total[5m]))",
+          "legendFormat": "messages in",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(kafka_server_brokertopicmetrics_messagesout_total[5m]))",
+          "legendFormat": "messages out",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "mps", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Network Throughput (Bytes In/Out)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [
+        {
+          "expr": "sum(rate(kafka_server_brokertopicmetrics_bytesin_total[5m]))",
+          "legendFormat": "bytes in",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(kafka_server_brokertopicmetrics_bytesout_total[5m]))",
+          "legendFormat": "bytes out",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "Bps", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Consumer Group Lag by Topic",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "targets": [
+        {
+          "expr": "sum by (consumergroup, topic) (kafka_consumergroup_lag)",
+          "legendFormat": "{{consumergroup}} / {{topic}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"]}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "short", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Request Total Time P99 (ms)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "targets": [
+        {
+          "expr": "kafka_network_requestmetrics_totaltimems{quantile=\"0.99\"}",
+          "legendFormat": "{{request}} P99",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "ms", "color": {"mode": "palette-classic"}},
+        "overrides": []
+      }
+    }
+  ]
+}

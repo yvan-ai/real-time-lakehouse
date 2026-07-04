@@ -1,0 +1,92 @@
+groups:
+  - name: kubernetes.rules
+    interval: 30s
+    rules:
+
+      # ── Recording rules ──────────────────────────────────────────────────
+      - record: namespace:container_cpu_usage:rate5m
+        expr: >
+          sum by (namespace) (
+            rate(container_cpu_usage_seconds_total{container!=""}[5m])
+          )
+
+      - record: namespace:container_memory_working_set:bytes
+        expr: >
+          sum by (namespace) (
+            container_memory_working_set_bytes{container!=""}
+          )
+
+      # ── Alerts ──────────────────────────────────────────────────────────
+      - alert: PodCrashLooping
+        expr: >
+          increase(kube_pod_container_status_restarts_total[15m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} crash-looping"
+          description: "{{ $value }} restarts in the last 15 minutes."
+
+      - alert: PodNotReady
+        expr: >
+          kube_pod_status_ready{condition="false",namespace=~"lakehouse|streaming|flink|trino"}
+          == 1
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} not ready"
+          description: "Pod has been in non-ready state for more than 5 minutes."
+
+      - alert: DeploymentReplicasMismatch
+        expr: >
+          kube_deployment_spec_replicas
+          != kube_deployment_status_available_replicas
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} replica mismatch"
+          description: >
+            Expected {{ $labels.spec_replicas }} replica(s),
+            have {{ $value }} available.
+
+      - alert: NodeMemoryPressure
+        expr: >
+          node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 5m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Node {{ $labels.instance }} low on memory"
+          description: >
+            Only {{ $value | humanizePercentage }} memory available.
+            WSL2 limit is 16 GB — consider increasing .wslconfig.
+
+      - alert: NodeDiskPressure
+        expr: >
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+          / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) < 0.10
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Node {{ $labels.instance }} disk {{ $labels.mountpoint }} running low"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining."
+
+      - alert: PersistentVolumeFillingUp
+        expr: >
+          kubelet_volume_stats_available_bytes
+          / kubelet_volume_stats_capacity_bytes < 0.15
+        for: 5m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} filling up"
+          description: "Only {{ $value | humanizePercentage }} space remaining."
