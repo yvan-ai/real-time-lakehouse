@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino
+  namespace: lakehouse
+  labels:
+    app: trino
+    app.kubernetes.io/part-of: real-time-lakehouse
+    layer: storage-query
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: trino
+  template:
+    metadata:
+      labels:
+        app: trino
+        app.kubernetes.io/part-of: real-time-lakehouse
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: trino
+          image: trinodb/trino:435
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # MinIO credentials injected as standard AWS env vars so the
+            # native S3 filesystem in the Iceberg catalog picks them up
+            # without embedding secrets in the ConfigMap.
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_PASSWORD
+          resources:
+            requests:
+              memory: "768Mi"
+              cpu: "500m"
+            limits:
+              memory: "1536Mi"
+              cpu: "1500m"
+          volumeMounts:
+            # Mount each config file individually with subPath so the rest of
+            # /etc/trino (written by the image) is not shadowed.
+            - name: config
+              mountPath: /etc/trino/config.properties
+              subPath: config.properties
+            - name: config
+              mountPath: /etc/trino/jvm.config
+              subPath: jvm.config
+            - name: config
+              mountPath: /etc/trino/node.properties
+              subPath: node.properties
+            - name: config
+              mountPath: /etc/trino/log.properties
+              subPath: log.properties
+            - name: config
+              mountPath: /etc/trino/catalog/iceberg.properties
+              subPath: iceberg.properties
+            - name: data
+              mountPath: /data/trino
+          livenessProbe:
+            httpGet:
+              path: /v1/info
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /v1/info
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: trino-config
+        - name: data
+          emptyDir: {}

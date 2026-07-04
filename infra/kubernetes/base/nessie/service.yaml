@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nessie
+  namespace: lakehouse
+  labels:
+    app: nessie
+    app.kubernetes.io/part-of: real-time-lakehouse
+    layer: storage-query
+spec:
+  type: ClusterIP
+  selector:
+    app: nessie
+  ports:
+    - name: api
+      port: 19120
+      targetPort: 19120
+      protocol: TCP

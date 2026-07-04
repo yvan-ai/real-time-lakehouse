@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nessie
+  namespace: lakehouse
+  labels:
+    app: nessie
+    app.kubernetes.io/part-of: real-time-lakehouse
+    layer: storage-query
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nessie
+  template:
+    metadata:
+      labels:
+        app: nessie
+        app.kubernetes.io/part-of: real-time-lakehouse
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532   # nonroot user in the nessie distroless image
+        fsGroup: 65532
+      containers:
+        - name: nessie
+          # Trino 435 bundles nessie-client 0.62.x — use matching server version.
+          image: ghcr.io/projectnessie/nessie:0.62.0
+          ports:
+            - name: api
+              containerPort: 19120
+              protocol: TCP
+          env:
+            - name: NESSIE_VERSION_STORE_TYPE
+              value: ROCKSDB
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/nessie
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: 19120
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: 19120
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nessie-data

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nessie-data
+  namespace: lakehouse
+  labels:
+    app: nessie
+    app.kubernetes.io/part-of: real-time-lakehouse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
