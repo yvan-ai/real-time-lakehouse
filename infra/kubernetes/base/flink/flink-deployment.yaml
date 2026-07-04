@@ -1,0 +1,94 @@
+# FlinkDeployment — Application mode (one cluster per job, recommended for production).
+# Managed by the Flink Kubernetes Operator (installed via scripts/install-flink-operator.sh).
+# Checkpoints and savepoints are stored on MinIO via the s3a:// filesystem plugin.
+---
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: order-revenue-job
+  namespace: flink
+spec:
+  image: order-revenue-job:1.0.0
+  imagePullPolicy: IfNotPresent
+  flinkVersion: v1_20
+  serviceAccount: flink
+
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+
+    # ── Checkpointing (exactly-once) ──────────────────────────────────────────
+    execution.checkpointing.interval: "60000"
+    execution.checkpointing.mode: EXACTLY_ONCE
+    execution.checkpointing.min-pause: "30000"
+    execution.checkpointing.timeout: "300000"
+    state.backend: rocksdb
+    state.checkpoints.dir: s3a://lakehouse/flink/checkpoints/order-revenue
+    state.savepoints.dir: s3a://lakehouse/flink/savepoints/order-revenue
+
+    # ── MinIO (S3-compatible) ─────────────────────────────────────────────────
+    # Credentials are injected as AWS_* env vars below; Hadoop S3A picks them up.
+    s3.endpoint: http://minio.lakehouse.svc.cluster.local:9000
+    s3.path.style.access: "true"
+
+    # ── Observability ─────────────────────────────────────────────────────────
+    rest.flamegraph.enabled: "true"
+    metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+    metrics.reporter.prom.port: "9249"
+
+  # Inject MinIO credentials so the S3A filesystem can authenticate.
+  # Secret minio-credentials-flink must be created before deploying:
+  #   kubectl create secret generic minio-credentials-flink -n flink \
+  #     --from-literal=MINIO_ROOT_USER=<access_key> \
+  #     --from-literal=MINIO_ROOT_PASSWORD=<secret_key>
+  # Production: use the ExternalSecret in minio-credentials.yaml once ESO is installed.
+  podTemplate:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9249"
+        prometheus.io/path: "/metrics"
+    spec:
+      volumes:
+        - name: job-script
+          configMap:
+            name: order-revenue-job-script
+      containers:
+        - name: flink-main-container
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials-flink
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials-flink
+                  key: MINIO_ROOT_PASSWORD
+          volumeMounts:
+            - name: job-script
+              mountPath: /opt/flink/usrlib/job.py
+              subPath: job.py
+
+  jobManager:
+    replicas: 1
+    resource:
+      memory: "1024m"
+      cpu: 0.1
+
+  taskManager:
+    replicas: 1
+    resource:
+      memory: "1024m"
+      cpu: 0.2
+
+  job:
+    # PyFlink Application mode: PythonDriver loads job.py via the -py flag.
+    jarURI: local:///opt/flink/opt/flink-python.jar
+    entryClass: org.apache.flink.client.python.PythonDriver
+    args:
+      - -py
+      - /opt/flink/usrlib/job.py
+    parallelism: 1
+    # savepoint: triggers a savepoint before upgrade and resumes from it.
+    upgradeMode: stateless
