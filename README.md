@@ -209,9 +209,16 @@ Key choices are documented as ADRs in [docs/decisions/](docs/decisions/):
 
 ## Roadmap
 
+Next three pillars — detailed action plan in [docs/roadmap.md](docs/roadmap.md):
+
+- [ ] **Data quality**: automated Great Expectations gate after each batch + published Data Docs
+- [ ] **Observability**: pipeline business dashboard, postgres/MinIO exporters, actionable alerts
+- [ ] **Lineage**: OpenLineage + Marquez — automatic Spark lineage, declarative CDC graph
+
+Longer term:
+
 - [ ] dbt models on Trino for the Gold layer (replace PySpark aggregations)
 - [ ] Airflow DAG to schedule the batch pipeline
-- [ ] OpenLineage integration for column-level lineage
 - [ ] External Secrets Operator for credential management
 - [ ] Terraform modules for a cloud deployment (EKS + MSK + S3)
 - [ ] Iceberg maintenance jobs (compaction, snapshot expiry) on a schedule
