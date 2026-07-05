@@ -33,8 +33,9 @@ target/
 .DS_Store
 Thumbs.db
 
-# Claude Code local permissions
+# Claude Code local permissions & machine-specific launch config
 .claude/settings.local.json
+.claude/launch.json
 
 # Local tooling caches
 .pytest_cache/

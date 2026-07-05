@@ -4,6 +4,11 @@ extends: default
 rules:
   line-length:
     max: 160
+  indentation:
+    # `kustomize edit set image` (run by the CD workflow) rewrites
+    # kustomization.yaml with non-indented sequences — accept both styles.
+    indent-sequences: whatever
+  comments-indentation: disable
   truthy:
     allowed-values: ["true", "false"]
     check-keys: false          # allow the `on:` key in GitHub workflows

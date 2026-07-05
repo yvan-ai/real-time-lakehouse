@@ -33,11 +33,17 @@ known-first-party = ["lakehouse_common"]
 # Jobs are mounted as flat files in the batch ConfigMap; sys.path tweak in
 # conftest.py must precede the lakehouse_common imports.
 "quality/tests/**" = ["E402"]
+# Stays importable on Python 3.8 (pytest fallback inside apache/spark image),
+# where zip(strict=) does not exist.
+"demo/generate_traffic.py" = ["B905"]
+# Batch jobs execute inside apache/spark:3.5.3-python3 (Python 3.8):
+# datetime.UTC (3.11+) would crash at runtime.
+"pipelines/batch/spark-jobs/*" = ["UP017"]
 
 # ── Mypy — static typing ──────────────────────────────────────────────────────
 [tool.mypy]
 python_version = "3.11"
-files = ["pipelines", "scripts", "quality/tests"]
+files = ["pipelines", "scripts", "quality/tests", "demo"]
 ignore_missing_imports = true
 check_untyped_defs = true
 warn_unused_ignores = true
@@ -45,7 +51,15 @@ warn_redundant_casts = true
 no_implicit_optional = true
 # Jobs are standalone scripts (not a package) — silence duplicate-module errors
 explicit_package_bases = true
-mypy_path = "pipelines/batch/spark-jobs"
+mypy_path = ["pipelines/batch/spark-jobs", "demo"]
+
+# Demo-only third-party libs: don't type-check their internals (numpy's stubs
+# require Python >= 3.12 and would fail the 3.11 run when installed locally).
+[[tool.mypy.overrides]]
+module = ["pandas.*", "numpy.*", "kafka.*", "streamlit.*", "trino.*", "psycopg2.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
+ignore_missing_imports = true
 
 # ── Pytest ────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
