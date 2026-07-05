@@ -48,6 +48,13 @@ GRANT UPDATE ON public.debezium_heartbeat TO debezium;
 CREATE PUBLICATION dbz_publication
     FOR TABLE public.orders, public.customers, public.order_items;
 
+-- Flink's debezium-json format requires the full `before` row image on UPDATE /
+-- DELETE to emit retractions; without FULL identity Debezium sends before=null
+-- and the streaming job fails. Costs extra WAL — acceptable at this scale.
+ALTER TABLE public.orders      REPLICA IDENTITY FULL;
+ALTER TABLE public.customers   REPLICA IDENTITY FULL;
+ALTER TABLE public.order_items REPLICA IDENTITY FULL;
+
 -- ── Sample data (optional, for smoke-testing the pipeline) ────────────────────
 
 INSERT INTO public.customers (name, email) VALUES
