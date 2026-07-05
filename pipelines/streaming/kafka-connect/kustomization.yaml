@@ -18,4 +18,4 @@ resources:
 images:
 - name: kafka-connect-lakehouse
   newName: ghcr.io/yvan-ai/real-time-lakehouse/kafka-connect-lakehouse
-  newTag: sha-007b042
+  newTag: sha-223ca24
