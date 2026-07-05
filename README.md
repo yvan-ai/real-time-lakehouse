@@ -120,6 +120,25 @@ cp .env.example .env          # set your own dev credentials
 make dev-up                   # Postgres + Kafka + MinIO + Nessie via Docker Compose
 ```
 
+## Live demo
+
+With the stack running, one command starts an **e-commerce traffic simulator** and a
+**real-time dashboard**:
+
+```bash
+pip install -r demo/requirements.txt
+make demo        # → dashboard at http://localhost:8501
+```
+
+![Real-time dashboard — Flink 1-minute revenue windows](docs/img/dashboard-hot-path.png)
+
+- The generator ([demo/generate_traffic.py](demo/generate_traffic.py)) creates customers
+  and orders, progresses statuses and cancels a few — every commit becomes a CDC event.
+- The **hot path tab** streams Flink's 1-minute revenue windows straight from Kafka
+  (via a Strimzi nodeport listener) — new aggregates appear ~1 minute after the orders.
+- The **cold path tab** queries the Gold Iceberg tables through Trino
+  (run `./scripts/run-batch.sh` to refresh them mid-demo).
+
 ### Development workflow
 
 ```bash
@@ -138,6 +157,7 @@ make validate   # kustomize build + kubeconform
 │   ├── models/iceberg/       # Iceberg DDL — bronze / silver / gold
 │   ├── schemas/              # JSON Schemas for CDC payloads
 │   └── contracts/            # Data contracts (SLA, ownership, quality)
+├── demo/                     # Traffic simulator + Streamlit dashboard (make demo)
 ├── docs/
 │   ├── architecture.md       # Detailed design & resource budget
 │   └── decisions/            # Architecture Decision Records (ADRs)
@@ -195,6 +215,7 @@ Key choices are documented as ADRs in [docs/decisions/](docs/decisions/):
 - [ ] External Secrets Operator for credential management
 - [ ] Terraform modules for a cloud deployment (EKS + MSK + S3)
 - [ ] Iceberg maintenance jobs (compaction, snapshot expiry) on a schedule
+- [ ] Prebaked Spark batch image (jars bundled) instead of runtime `--packages` downloads
 
 ## Contact
 
