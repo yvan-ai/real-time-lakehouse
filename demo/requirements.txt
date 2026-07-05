@@ -1,0 +1,7 @@
+# Demo dependencies — traffic generator + Streamlit dashboard
+psycopg2-binary>=2.9
+streamlit>=1.37
+pandas>=2.0
+kafka-python>=2.1
+python-snappy>=0.7          # Flink writes snappy-compressed batches
+trino>=0.330
