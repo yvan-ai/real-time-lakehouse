@@ -4,7 +4,7 @@ silver.orders + silver.order_items -> gold.daily_revenue
 silver.orders + silver.customers   -> gold.customer_metrics
 """
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
@@ -67,7 +67,7 @@ def gold_daily_revenue(spark: SparkSession) -> None:
         )
         .join(first_orders, "report_date", "left")
         .withColumn("new_customers", F.coalesce(F.col("new_customers"), F.lit(0)).cast("bigint"))
-        .withColumn("computed_at", F.lit(datetime.now(UTC).isoformat()).cast("timestamp"))
+        .withColumn("computed_at", F.lit(datetime.now(timezone.utc).isoformat()).cast("timestamp"))
         .select(
             "report_date",
             "currency",
@@ -92,7 +92,7 @@ def gold_customer_metrics(spark: SparkSession) -> None:
     orders = revenue_orders(spark)
     customers = spark.table("iceberg.silver.customers").filter(F.col("_source_op").isin(*UPSERT_OPS))
 
-    today = F.to_date(F.lit(datetime.now(UTC).date().isoformat()))
+    today = F.to_date(F.lit(datetime.now(timezone.utc).date().isoformat()))
 
     order_stats = with_recency_metrics(
         orders.groupBy("customer_id").agg(
@@ -116,7 +116,7 @@ def gold_customer_metrics(spark: SparkSession) -> None:
         F.coalesce(F.col("avg_order_value"), F.lit(0).cast("decimal(18,2)")).alias("avg_order_value"),
         F.col("days_since_last_order"),
         F.coalesce(F.col("is_churned"), F.lit(False)).alias("is_churned"),
-        F.lit(datetime.now(UTC).isoformat()).cast("timestamp").alias("computed_at"),
+        F.lit(datetime.now(timezone.utc).isoformat()).cast("timestamp").alias("computed_at"),
     )
 
     metrics.writeTo("iceberg.gold.customer_metrics").overwritePartitions()
