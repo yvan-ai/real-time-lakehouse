@@ -18,6 +18,10 @@ Usage:
 Or simply: ./scripts/run-iceberg-init.sh (handles port-forwards and Docker).
 """
 
+# The script runs inside apache/spark:3.5.3-python3 (Python 3.8) — keep
+# annotations lazy so 3.9+ generic syntax does not break at runtime.
+from __future__ import annotations
+
 import logging
 import os
 import sys

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Run init_iceberg.py via Docker — no local Spark install needed.
-# The container uses --network host so it reaches MinIO (localhost:9000) and
-# Nessie (localhost:19120) through the kubectl port-forwards below.
+# The container reaches MinIO (:9000) and Nessie (:19120) through the kubectl
+# port-forwards below, via host.docker.internal. Docker Desktop's --network
+# host does NOT see WSL-bound ports, hence the host-gateway mapping and the
+# port-forwards listening on all addresses.
 #
 # Requirements: docker, kubectl
 
@@ -20,22 +22,22 @@ MINIO_SECRET_KEY=$(kubectl get secret minio-credentials -n lakehouse \
   -o jsonpath='{.data.MINIO_ROOT_PASSWORD}' | base64 -d)
 
 # Start MinIO + Nessie port-forwards in background; kill them on exit
-echo "Port-forwarding MinIO on localhost:9000..."
-kubectl port-forward svc/minio 9000:9000 -n lakehouse &>/dev/null &
+echo "Port-forwarding MinIO on :9000..."
+kubectl port-forward --address 0.0.0.0 svc/minio 9000:9000 -n lakehouse &>/dev/null &
 PF_MINIO_PID=$!
-echo "Port-forwarding Nessie on localhost:19120..."
-kubectl port-forward svc/nessie 19120:19120 -n lakehouse &>/dev/null &
+echo "Port-forwarding Nessie on :19120..."
+kubectl port-forward --address 0.0.0.0 svc/nessie 19120:19120 -n lakehouse &>/dev/null &
 PF_NESSIE_PID=$!
 trap 'kill "${PF_MINIO_PID}" "${PF_NESSIE_PID}" 2>/dev/null || true' EXIT INT TERM
 sleep 3  # wait for the tunnels to be ready
 
 echo "Running init_iceberg.py via Docker (Spark ${SPARK_IMAGE})..."
 docker run --rm \
-  --network host \
+  --add-host=host.docker.internal:host-gateway \
   -e MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY}" \
   -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY}" \
-  -e MINIO_ENDPOINT="http://localhost:9000" \
-  -e NESSIE_URI="http://localhost:19120/api/v1" \
+  -e MINIO_ENDPOINT="http://host.docker.internal:9000" \
+  -e NESSIE_URI="http://host.docker.internal:19120/api/v1" \
   -v "$(pwd)/scripts:/opt/app/scripts:ro" \
   -v "$(pwd)/data:/opt/app/data:ro" \
   -w /opt/app \
