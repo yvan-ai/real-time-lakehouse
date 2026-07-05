@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SPARK_JOBS_DIR = REPO_ROOT / "pipelines" / "batch" / "spark-jobs"
 
 sys.path.insert(0, str(SPARK_JOBS_DIR))
+sys.path.insert(0, str(REPO_ROOT / "demo"))
 
 
 @pytest.fixture(scope="session")
