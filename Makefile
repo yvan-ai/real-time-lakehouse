@@ -2,7 +2,7 @@
 # `make help` lists all targets.
 
 .PHONY: help setup lint format typecheck test validate quality \
-        bootstrap deploy batch iceberg-init dev-up dev-down clean
+        bootstrap deploy batch iceberg-init dev-up dev-down demo dashboard clean
 
 PYTHON ?= python3
 
@@ -48,6 +48,12 @@ batch:           ## Trigger a Bronze→Silver→Gold batch run on the cluster
 
 iceberg-init:    ## Create all Iceberg tables (Nessie catalog on MinIO)
 	./scripts/run-iceberg-init.sh
+
+demo:            ## Live demo: traffic generator + dashboard (needs running cluster)
+	./scripts/demo.sh
+
+dashboard:       ## Streamlit dashboard only (assumes tunnels/env already set)
+	streamlit run demo/dashboard.py
 
 dev-up:          ## Start the lightweight Docker Compose dev stack
 	docker compose -f docker-compose.dev.yml up -d
