@@ -48,6 +48,19 @@ spec:
         port: 9093
         type: internal
         tls: true
+      # Host access for local clients (demo dashboard, kcat) — k3s runs on the
+      # same machine, so the node address is localhost.
+      - name: external
+        port: 9094
+        type: nodeport
+        tls: false
+        configuration:
+          bootstrap:
+            nodePort: 32100
+          brokers:
+            - broker: 0
+              advertisedHost: localhost
+              nodePort: 32101
     config:
       offsets.topic.replication.factor: "1"
       transaction.state.log.replication.factor: "1"
@@ -56,14 +69,15 @@ spec:
       min.insync.replicas: "1"
       log.retention.hours: "24"
       log.segment.bytes: "67108864"
-  # JMX Prometheus Exporter — exposes broker metrics on :9404.
-  # Config lives in the kafka-metrics ConfigMap (infra/kubernetes/base/monitoring/).
-  metricsConfig:
-    type: jmxPrometheusExporter
-    valueFrom:
-      configMapKeyRef:
-        name: kafka-metrics
-        key: kafka-metrics-config.yml
+    # JMX Prometheus Exporter — exposes broker metrics on :9404.
+    # Config lives in the kafka-metrics ConfigMap (infra/kubernetes/base/monitoring/).
+    # Must sit under spec.kafka — the Strimzi v1 API rejects it at spec level.
+    metricsConfig:
+      type: jmxPrometheusExporter
+      valueFrom:
+        configMapKeyRef:
+          name: kafka-metrics
+          key: kafka-metrics-config.yml
 
   # Strimzi Kafka Exporter — adds consumer-group lag metrics on :9308.
   kafkaExporter:
