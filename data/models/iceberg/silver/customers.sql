@@ -2,14 +2,13 @@
 -- Layer: Silver — deduplicated, typed customer records from raw.cdc_customers
 -- Strategy: MERGE-ON-READ for efficient UPSERT from CDC
 -- Partition: day(created_at) — low-update-frequency table; date range queries are common
+-- Columns mirror the source customers table (see infra/kubernetes/base/postgres/init.sql)
+-- plus lakehouse metadata.
 
 CREATE TABLE IF NOT EXISTS iceberg.silver.customers (
     customer_id   STRING    NOT NULL COMMENT 'Business primary key',
+    name          STRING    COMMENT 'Customer display name',
     email         STRING    COMMENT 'Customer email (PII — apply masking in gold)',
-    first_name    STRING    COMMENT 'Given name',
-    last_name     STRING    COMMENT 'Family name',
-    country_code  STRING    COMMENT 'ISO 3166-1 alpha-2 country code',
-    segment       STRING    COMMENT 'CRM segment: consumer / business / vip',
     created_at    TIMESTAMP COMMENT 'Account creation timestamp from source',
     updated_at    TIMESTAMP COMMENT 'Last update timestamp from source',
     _source_op    STRING    COMMENT 'Last CDC op: c / u / d',
