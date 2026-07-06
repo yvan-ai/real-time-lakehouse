@@ -39,8 +39,12 @@ def run_checkpoint(context: gx.DataContext, layer: str) -> CheckpointResult:
     return context.run_checkpoint(checkpoint_name=layer)
 
 
-def summarise(result: CheckpointResult, layer: str) -> bool:
-    """Print a human-readable summary and return True if all expectations passed."""
+def summarise(result: CheckpointResult, layer: str) -> tuple[bool, int, int]:
+    """Print a human-readable summary.
+
+    Returns:
+        (overall_success, total_passed, total_evaluated) for the layer.
+    """
     total_evaluated = 0
     total_passed = 0
     failures: list[str] = []
@@ -71,7 +75,7 @@ def summarise(result: CheckpointResult, layer: str) -> bool:
         for f in failures:
             print(f)
 
-    return overall
+    return overall, total_passed, total_evaluated
 
 
 def check_churn_consistency(context: gx.DataContext) -> bool:
@@ -111,6 +115,63 @@ def check_churn_consistency(context: gx.DataContext) -> bool:
         return True  # don't block CI on connectivity issues
 
 
+def push_metrics(layer_stats: dict[str, dict[str, int]], all_passed: bool) -> None:
+    """Push gx_* metrics to the Prometheus Pushgateway named in PUSHGATEWAY_URL.
+
+    Feeds the QualityGateFailed alert (observability/prometheus/rules/pipeline.yml).
+    Never raises — a missing or unreachable Pushgateway must not change the
+    gate verdict.
+    """
+    gateway = os.environ.get("PUSHGATEWAY_URL")
+    if not gateway:
+        return
+
+    try:
+        from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
+
+        registry = CollectorRegistry()
+        passed = Gauge(
+            "gx_expectations_passed",
+            "Expectations that passed in the last quality-gate run",
+            ["layer"],
+            registry=registry,
+        )
+        failed = Gauge(
+            "gx_expectations_failed",
+            "Expectations that failed in the last quality-gate run",
+            ["layer"],
+            registry=registry,
+        )
+        success = Gauge(
+            "gx_validation_success",
+            "1 if every expectation of the layer passed in the last run",
+            ["layer"],
+            registry=registry,
+        )
+        overall = Gauge(
+            "gx_quality_gate_success",
+            "1 if the whole quality gate passed (all layers + custom checks)",
+            registry=registry,
+        )
+        last_run = Gauge(
+            "gx_last_run_timestamp_seconds",
+            "Unix time of the last quality-gate run",
+            registry=registry,
+        )
+
+        for layer, stats in layer_stats.items():
+            passed.labels(layer=layer).set(stats["passed"])
+            failed.labels(layer=layer).set(stats["evaluated"] - stats["passed"])
+            success.labels(layer=layer).set(stats["success"])
+        overall.set(1 if all_passed else 0)
+        last_run.set_to_current_time()
+
+        push_to_gateway(gateway, job="quality-gate", registry=registry)
+        print(f"\nMetrics pushed to {gateway}")
+    except Exception as exc:
+        print(f"\n[WARN] Could not push metrics to Pushgateway: {exc}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run GX data quality checkpoints")
     parser.add_argument(
@@ -140,6 +201,7 @@ def main() -> int:
 
     layers_to_run = LAYERS if args.layer == "all" else [args.layer]
     all_passed = True
+    layer_stats: dict[str, dict[str, int]] = {}
 
     for layer in layers_to_run:
         print(f"\n{'=' * 60}")
@@ -147,11 +209,17 @@ def main() -> int:
         print("=" * 60)
         try:
             result = run_checkpoint(context, layer)
-            passed = summarise(result, layer)
+            passed, n_passed, n_evaluated = summarise(result, layer)
+            layer_stats[layer] = {
+                "passed": n_passed,
+                "evaluated": n_evaluated,
+                "success": 1 if passed else 0,
+            }
             if not passed:
                 all_passed = False
         except Exception as exc:
             print(f"  ERROR running checkpoint '{layer}': {exc}")
+            layer_stats[layer] = {"passed": 0, "evaluated": 0, "success": 0}
             all_passed = False
 
     # Extra cross-column check for gold layer
@@ -161,6 +229,10 @@ def main() -> int:
         print("=" * 60)
         if not check_churn_consistency(context):
             all_passed = False
+            if "gold" in layer_stats:
+                layer_stats["gold"]["success"] = 0
+
+    push_metrics(layer_stats, all_passed)
 
     # Build / refresh data docs
     try:

@@ -3,3 +3,4 @@ sqlalchemy==1.4.52
 trino[sqlalchemy]==0.328.0
 pandas==2.2.2
 pyarrow==16.0.0
+prometheus-client==0.20.0
