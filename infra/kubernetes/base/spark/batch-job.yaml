@@ -32,12 +32,27 @@ spec:
               set -euo pipefail
               PACKAGES="org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3"
 
+              # OpenLineage — automatic Bronze→Silver→Gold lineage to Marquez
+              # (ADR-0008). Only enabled when OPENLINEAGE_URL is set, so the
+              # batch still runs on clusters without the lineage stack.
+              OL_CONFS=()
+              if [[ -n "${OPENLINEAGE_URL:-}" ]]; then
+                PACKAGES="${PACKAGES},io.openlineage:openlineage-spark_2.12:1.24.2"
+                OL_CONFS=(
+                  --conf "spark.extraListeners=io.openlineage.spark.agent.OpenLineageSparkListener"
+                  --conf "spark.openlineage.transport.type=http"
+                  --conf "spark.openlineage.transport.url=${OPENLINEAGE_URL}"
+                  --conf "spark.openlineage.namespace=lakehouse"
+                )
+              fi
+
               run_job() {
                 /opt/spark/bin/spark-submit \
                   --master "local[2]" \
                   --packages "${PACKAGES}" \
                   --py-files /scripts/lakehouse_common.py \
                   --conf "spark.driver.extraJavaOptions=-Divy.cache.dir=/tmp/.ivy -Divy.home=/tmp/.ivy" \
+                  "${OL_CONFS[@]}" \
                   "$1"
               }
 
@@ -68,6 +83,8 @@ spec:
               value: "http://nessie.lakehouse.svc.cluster.local:19120/api/v1"
             - name: MINIO_ENDPOINT
               value: "http://minio.lakehouse.svc.cluster.local:9000"
+            - name: OPENLINEAGE_URL
+              value: "http://marquez.lineage.svc.cluster.local:5000"
           resources:
             requests:
               memory: "1Gi"
