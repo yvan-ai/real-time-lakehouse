@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# DAG files shipped to the Airflow pod as a ConfigMap (ADR-0009): DAG changes
+# deploy with `kubectl apply -k`, the same path as every other manifest.
+namespace: orchestration
+
+configMapGenerator:
+  - name: airflow-dags
+    files:
+      - dags/lakehouse_batch.py
+    options:
+      disableNameSuffixHash: true

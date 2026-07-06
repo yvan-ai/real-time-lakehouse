@@ -34,3 +34,9 @@ RUN set -eux; \
       curl -fsSL --retry 5 --retry-connrefused -O "${MAVEN}/${artefact}"; \
     done
 USER spark
+
+# Job scripts baked in for the Airflow DAG (KubernetesPodOperator has no
+# ConfigMap refresh step). The k8s Job path keeps mounting the ConfigMap at
+# /scripts for fast local iteration — see scripts/run-batch.sh.
+COPY spark-jobs/ /opt/spark/jobs/
+

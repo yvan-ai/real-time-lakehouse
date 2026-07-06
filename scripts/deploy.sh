@@ -26,6 +26,13 @@ if [[ ! -f "${OVERLAY}/marquez.env" ]]; then
   exit 1
 fi
 
+if [[ ! -f "${OVERLAY}/airflow.env" ]]; then
+  echo "ERROR: ${OVERLAY}/airflow.env not found." >&2
+  echo "  cp ${OVERLAY}/airflow.env.example ${OVERLAY}/airflow.env  # then edit" >&2
+  echo "  (bootstrap.sh generates it automatically)" >&2
+  exit 1
+fi
+
 if [[ "${1:-}" == "--check" ]]; then
   echo "Dry-run (server-side) of the local overlay..."
   kubectl apply -k "${OVERLAY}" --dry-run=server
@@ -34,6 +41,14 @@ fi
 
 echo "Applying local overlay..."
 kubectl apply -k "${OVERLAY}"
+
+# The register_lineage DAG task mounts this script; it lives in scripts/ so
+# no kustomization can reach it — refresh it here (same idea as the
+# batch-spark-jobs ConfigMap in run-batch.sh).
+echo "Refreshing register-lineage-script ConfigMap..."
+kubectl create configmap register-lineage-script -n lineage \
+  --from-file=register_lineage.py="${REPO_ROOT}/scripts/register_lineage.py" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 echo ""
 echo "Deployment applied. Watch rollout with:"

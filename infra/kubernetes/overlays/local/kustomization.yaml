@@ -15,8 +15,10 @@ resources:
   - ../../base/trino
   - ../../base/monitoring
   - ../../base/marquez
+  - ../../base/airflow
   - ../../../../pipelines/streaming/kafka-topics
   - ../../../../pipelines/streaming/kafka-connect
+  - ../../../../pipelines/orchestration
 
 secretGenerator:
   - name: minio-credentials
@@ -37,5 +39,19 @@ secretGenerator:
     namespace: streaming
     envs:
       - marquez.env
+    options:
+      disableNameSuffixHash: true
+  # Airflow credentials — rendered in both namespaces: the airflow pod
+  # (orchestration) and the db-init Job next to Postgres (streaming).
+  - name: airflow-credentials
+    namespace: orchestration
+    envs:
+      - airflow.env
+    options:
+      disableNameSuffixHash: true
+  - name: airflow-credentials
+    namespace: streaming
+    envs:
+      - airflow.env
     options:
       disableNameSuffixHash: true
