@@ -18,3 +18,4 @@ rules:
 
 ignore: |
   infra/kubernetes/base/monitoring/grafana.yaml
+  .claude/
