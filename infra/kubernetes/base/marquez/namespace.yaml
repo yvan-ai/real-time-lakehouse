@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lineage
+  labels:
+    app.kubernetes.io/part-of: real-time-lakehouse
+    layer: lineage
+    kubernetes.io/metadata.name: lineage

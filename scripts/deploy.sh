@@ -19,6 +19,13 @@ if [[ ! -f "${OVERLAY}/minio.env" ]]; then
   exit 1
 fi
 
+if [[ ! -f "${OVERLAY}/marquez.env" ]]; then
+  echo "ERROR: ${OVERLAY}/marquez.env not found." >&2
+  echo "  cp ${OVERLAY}/marquez.env.example ${OVERLAY}/marquez.env  # then edit" >&2
+  echo "  (bootstrap.sh generates it automatically)" >&2
+  exit 1
+fi
+
 if [[ "${1:-}" == "--check" ]]; then
   echo "Dry-run (server-side) of the local overlay..."
   kubectl apply -k "${OVERLAY}" --dry-run=server

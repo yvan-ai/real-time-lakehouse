@@ -1,0 +1,32 @@
+# Dropwizard config for the Marquez API. Without MARQUEZ_CONFIG the image
+# falls back to its dev config, which hardcodes host "postgres" — env vars
+# like POSTGRES_HOST are ignored there. ${VAR} placeholders below are
+# substituted from the container environment at startup.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: marquez-config
+  namespace: lineage
+data:
+  marquez.yml: |
+    server:
+      applicationConnectors:
+        - type: http
+          port: ${MARQUEZ_PORT}
+          httpCompliance: RFC7230_LEGACY
+      adminConnectors:
+        - type: http
+          port: ${MARQUEZ_ADMIN_PORT}
+
+    db:
+      driverClass: org.postgresql.Driver
+      url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+
+    migrateOnStartup: true
+
+    logging:
+      level: INFO
+      appenders:
+        - type: console

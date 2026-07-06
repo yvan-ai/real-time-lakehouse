@@ -1,0 +1,77 @@
+---
+# One-shot init: create the marquez role + database in the EXISTING Postgres
+# (shared instance, ADR-0008). Runs in the streaming namespace where both
+# postgres-credentials (admin) and marquez-db-credentials live.
+#
+# NOT part of the kustomization (Jobs are immutable) — bootstrap.sh deletes
+# and re-applies it. Idempotent: role and database are only created if absent,
+# the role password is re-synced on every run.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: marquez-db-init
+  namespace: streaming
+  labels:
+    app: marquez-db-init
+    app.kubernetes.io/part-of: real-time-lakehouse
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: marquez-db-init
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: postgres:16
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              echo "Creating marquez role + database (if absent)..."
+              psql -v ON_ERROR_STOP=1 -d lakehouse <<SQL
+              DO \$\$
+              BEGIN
+                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${MARQUEZ_DB_USER}') THEN
+                  CREATE ROLE ${MARQUEZ_DB_USER} LOGIN;
+                END IF;
+              END
+              \$\$;
+              ALTER ROLE ${MARQUEZ_DB_USER} WITH LOGIN PASSWORD '${MARQUEZ_DB_PASSWORD}';
+              SELECT 'CREATE DATABASE marquez OWNER ${MARQUEZ_DB_USER}'
+              WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'marquez')\gexec
+              SQL
+              echo "Done."
+          env:
+            - name: PGHOST
+              value: postgres.streaming.svc.cluster.local
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: MARQUEZ_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: marquez-db-credentials
+                  key: MARQUEZ_DB_USER
+            - name: MARQUEZ_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: marquez-db-credentials
+                  key: MARQUEZ_DB_PASSWORD
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 10m
+            limits:
+              memory: 64Mi
+              cpu: 100m

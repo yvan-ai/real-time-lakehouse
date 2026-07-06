@@ -1,0 +1,37 @@
+---
+# OpenLineage HTTP API — target of spark.openlineage.transport.url and
+# scripts/register_lineage.py.
+apiVersion: v1
+kind: Service
+metadata:
+  name: marquez
+  namespace: lineage
+  labels:
+    app: marquez
+spec:
+  selector:
+    app: marquez
+  ports:
+    - name: api
+      port: 5000
+      targetPort: 5000
+    - name: admin
+      port: 5001
+      targetPort: 5001
+
+---
+# Graph UI — kubectl port-forward svc/marquez-web 3000:3000 -n lineage
+apiVersion: v1
+kind: Service
+metadata:
+  name: marquez-web
+  namespace: lineage
+  labels:
+    app: marquez
+spec:
+  selector:
+    app: marquez
+  ports:
+    - name: web
+      port: 3000
+      targetPort: 3000
