@@ -94,12 +94,14 @@ jobs:
       - name: Setup Kustomize
         uses: imranismail/setup-kustomize@v2
 
-      - name: Provide placeholder MinIO env for secretGenerator
-        # minio.env is gitignored (real credentials); the example file is
-        # enough to render manifests for validation.
+      - name: Provide placeholder env files for secretGenerator
+        # minio.env / marquez.env are gitignored (real credentials); the
+        # example files are enough to render manifests for validation.
         run: |
           cp infra/kubernetes/overlays/local/minio.env.example \
              infra/kubernetes/overlays/local/minio.env
+          cp infra/kubernetes/overlays/local/marquez.env.example \
+             infra/kubernetes/overlays/local/marquez.env
 
       - name: kustomize build — local overlay
         # Render inside the workspace: the kubeconform container only mounts
@@ -168,3 +170,53 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ── 6. GX Data Docs → GitHub Pages (main only) ────────────────────────────
+  # Requires Pages enabled with the "GitHub Actions" source, which needs a
+  # public repository on the free plan. Gate: set the repository variable
+  # ENABLE_PAGES=true once Pages is available.
+  data-docs:
+    name: Publish Data Docs
+    runs-on: ubuntu-latest
+    needs: [lint-python]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_PAGES == 'true'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install quality dependencies
+        run: pip install -r quality/great-expectations/requirements-quality.txt
+
+      - name: Build GX Data Docs (config-only)
+        # Renders the expectation-suite pages from the committed suites; the
+        # datasource is never queried, so a placeholder connection string is
+        # enough. Validation results are produced in-cluster by the quality
+        # gate, not in CI.
+        env:
+          GX_TRINO_CONNECTION_STRING: trino://admin@localhost:8080/iceberg
+        run: |
+          python - <<'EOF'
+          import great_expectations as gx
+
+          context = gx.get_context(context_root_dir="quality/great-expectations")
+          context.build_data_docs()
+          EOF
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: quality/great-expectations/uncommitted/data_docs/local_site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
