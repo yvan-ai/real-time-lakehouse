@@ -49,12 +49,13 @@ batched lakehouse.
 
 - [x] CI step generating GX Data Docs (config-only or pandas sample).
 - [x] Publish to **GitHub Pages** (via `actions/deploy-pages`) — the deploy job
-      is gated on the repo variable `ENABLE_PAGES=true`: Pages needs a public
-      repo on the free plan, and the repo is currently private.
+      is gated on the repo variable `ENABLE_PAGES` (set to `true`; flip it off
+      if the repo ever goes private again, Pages needs a public repo on the
+      free plan).
 - [x] README: "Data Docs" badge/link next to the CI badge.
 
-**Done when**: a public URL shows the browsable expectation results
-*(pending: make the repo public again + enable Pages + set `ENABLE_PAGES`)*.
+**Done when**: a public URL shows the browsable expectation results —
+live at <https://yvan-ai.github.io/real-time-lakehouse/>.
 
 ### 1.4 Export quality metrics to Prometheus — S
 
