@@ -19,6 +19,7 @@ resources:
   - ../../../../pipelines/streaming/kafka-topics
   - ../../../../pipelines/streaming/kafka-connect
   - ../../../../pipelines/orchestration
+  - ../../../../pipelines/dbt
 
 secretGenerator:
   - name: minio-credentials

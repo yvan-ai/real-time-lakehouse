@@ -56,6 +56,32 @@ jobs:
           pip install -r requirements-test.txt
           mypy
 
+  # ── 2b. dbt parse + SQL lint (no cluster needed) ──────────────────────────
+  lint-dbt:
+    name: dbt Parse & SQL Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dbt-trino + sqlfluff
+        run: pip install "dbt-trino==1.8.4" "sqlfluff==3.2.5"
+
+      - name: dbt parse
+        # parse compiles the project without connecting to Trino.
+        run: |
+          cd pipelines/dbt
+          dbt parse --profiles-dir . --target local
+
+      - name: sqlfluff lint
+        run: |
+          cd pipelines/dbt
+          sqlfluff lint models tests
+
   # ── 3. Unit tests (pytest + local PySpark) ────────────────────────────────
   test-python:
     name: Unit Tests
@@ -183,7 +209,7 @@ jobs:
   data-docs:
     name: Publish Data Docs
     runs-on: ubuntu-latest
-    needs: [lint-python]
+    needs: [lint-python, lint-dbt]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_PAGES == 'true'
     permissions:
       pages: write
@@ -200,7 +226,9 @@ jobs:
           cache: pip
 
       - name: Install quality dependencies
-        run: pip install -r quality/great-expectations/requirements-quality.txt
+        run: |
+          pip install -r quality/great-expectations/requirements-quality.txt
+          pip install "dbt-trino==1.8.4"
 
       - name: Build GX Data Docs (config-only)
         # Renders the expectation-suite pages from the committed suites; the
@@ -217,10 +245,25 @@ jobs:
           context.build_data_docs()
           EOF
 
+      - name: Build dbt docs (no warehouse connection)
+        # --empty-catalog renders the docs from the manifest only, so the
+        # Trino datasource is never queried in CI.
+        run: |
+          cd pipelines/dbt
+          dbt docs generate --empty-catalog --profiles-dir . --target local
+
+      - name: Assemble Pages site (GX docs at /, dbt docs at /dbt/)
+        run: |
+          mkdir -p site/dbt
+          cp -r quality/great-expectations/uncommitted/data_docs/local_site/. site/
+          cp pipelines/dbt/target/index.html \
+             pipelines/dbt/target/manifest.json \
+             pipelines/dbt/target/catalog.json site/dbt/
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: quality/great-expectations/uncommitted/data_docs/local_site
+          path: site
 
       - name: Deploy to GitHub Pages
         id: deployment

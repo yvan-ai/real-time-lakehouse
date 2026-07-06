@@ -91,9 +91,10 @@ for attempt in 1 2 3 4 5; do
 done
 
 echo "[2/3] Assembling dbt project..."
-mkdir -p /tmp/dbt/models/gold
+mkdir -p /tmp/dbt/models/gold /tmp/dbt/tests
 cp /dbt-src/dbt_project.yml /dbt-src/profiles.yml /tmp/dbt/
 cp /dbt-models/*.sql /dbt-models/*.yml /tmp/dbt/models/gold/
+cp /dbt-tests/*.sql /tmp/dbt/tests/
 
 echo "[3/3] dbt build (with OpenLineage emission)..."
 cd /tmp/dbt && dbt-ol build --profiles-dir . --target k8s
@@ -187,10 +188,15 @@ with DAG(
             k8s.V1EnvVar(name="OPENLINEAGE_URL", value=MARQUEZ_URL),
             k8s.V1EnvVar(name="OPENLINEAGE_NAMESPACE", value="lakehouse"),
         ],
-        volumes=[_configmap_volume("dbt-project"), _configmap_volume("dbt-models")],
+        volumes=[
+            _configmap_volume("dbt-project"),
+            _configmap_volume("dbt-models"),
+            _configmap_volume("dbt-tests"),
+        ],
         volume_mounts=[
             k8s.V1VolumeMount(name="dbt-project", mount_path="/dbt-src"),
             k8s.V1VolumeMount(name="dbt-models", mount_path="/dbt-models"),
+            k8s.V1VolumeMount(name="dbt-tests", mount_path="/dbt-tests"),
         ],
         container_resources=k8s.V1ResourceRequirements(
             requests={"memory": "128Mi", "cpu": "50m"},
