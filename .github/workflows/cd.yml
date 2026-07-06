@@ -50,12 +50,19 @@ jobs:
           kustomize edit set image \
             kafka-connect-lakehouse=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/kafka-connect-lakehouse:sha-${{ steps.sha.outputs.short }}
 
+      - name: Update Spark batch image tag
+        run: |
+          cd infra/kubernetes/base/spark
+          kustomize edit set image \
+            spark-batch=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/spark-batch:sha-${{ steps.sha.outputs.short }}
+
       - name: Commit & push updated tags
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add \
             infra/kubernetes/base/flink/kustomization.yaml \
+            infra/kubernetes/base/spark/kustomization.yaml \
             pipelines/streaming/kafka-connect/kustomization.yaml
           if git diff --staged --quiet; then
             echo "No image tag changes to commit."

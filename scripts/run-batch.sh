@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-JOB_YAML="infra/kubernetes/base/spark/batch-job.yaml"
+JOB_KUSTOMIZATION="infra/kubernetes/base/spark"
 NAMESPACE="spark"
 BATCH_TIMEOUT_SECONDS="${BATCH_TIMEOUT:-2400}"
 
@@ -26,7 +26,9 @@ kubectl wait pod -n "${NAMESPACE}" -l app=batch-pipeline \
   --for=delete --timeout=60s 2>/dev/null || true
 
 echo "Submitting new batch Job..."
-kubectl apply -f "${JOB_YAML}"
+# -k, not -f: the kustomization pins the prebaked spark-batch image tag
+# (bumped by CD on main, or set to spark-batch:local for a local build).
+kubectl apply -k "${JOB_KUSTOMIZATION}"
 
 echo ""
 echo "Job submitted. Follow logs with:"

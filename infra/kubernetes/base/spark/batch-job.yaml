@@ -1,7 +1,8 @@
 ---
-# Packages downloaded at runtime from Maven Central.
-# On first run this takes ~5 min; subsequent runs use the ephemeral /tmp cache
-# inside the same pod (no cross-pod caching — acceptable for local dev).
+# Runs on the prebaked spark-batch image (pipelines/batch/Dockerfile): all
+# jars are bundled at build time, so no Maven Central downloads at runtime.
+# The image tag is managed by the kustomization (CD bumps it on main) —
+# apply with `kubectl apply -k infra/kubernetes/base/spark/` (run-batch.sh).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -23,21 +24,20 @@ spec:
       restartPolicy: Never
       containers:
         - name: spark-batch
-          image: apache/spark:3.5.3-python3
+          image: spark-batch
           imagePullPolicy: IfNotPresent
           command:
             - /bin/bash
             - -c
             - |
               set -euo pipefail
-              PACKAGES="org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3"
 
               # OpenLineage — automatic Bronze→Silver→Gold lineage to Marquez
               # (ADR-0008). Only enabled when OPENLINEAGE_URL is set, so the
               # batch still runs on clusters without the lineage stack.
+              # The listener jar is baked into the image alongside the others.
               OL_CONFS=()
               if [[ -n "${OPENLINEAGE_URL:-}" ]]; then
-                PACKAGES="${PACKAGES},io.openlineage:openlineage-spark_2.12:1.24.2"
                 OL_CONFS=(
                   --conf "spark.extraListeners=io.openlineage.spark.agent.OpenLineageSparkListener"
                   --conf "spark.openlineage.transport.type=http"
@@ -52,9 +52,7 @@ spec:
               run_job() {
                 /opt/spark/bin/spark-submit \
                   --master "local[2]" \
-                  --packages "${PACKAGES}" \
                   --py-files /scripts/lakehouse_common.py \
-                  --conf "spark.driver.extraJavaOptions=-Divy.cache.dir=/tmp/.ivy -Divy.home=/tmp/.ivy" \
                   "${OL_CONFS[@]}" \
                   "$1"
               }

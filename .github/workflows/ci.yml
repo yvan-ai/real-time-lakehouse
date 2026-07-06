@@ -138,6 +138,9 @@ jobs:
           - name: kafka-connect-lakehouse
             context: pipelines/streaming/kafka-connect
             dockerfile: pipelines/streaming/kafka-connect/Dockerfile
+          - name: spark-batch
+            context: pipelines/batch
+            dockerfile: pipelines/batch/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
