@@ -7,8 +7,6 @@
     "notes": "Bronze — raw.cdc_customers. Debezium CDC stream. Same envelope checks as cdc_orders."
   },
   "expectations": [
-
-    // ── Table-level ─────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_table_row_count_to_be_between",
       "kwargs": {"min_value": 1, "max_value": null},
@@ -24,8 +22,6 @@
       },
       "meta": {}
     },
-
-    // ── cdc_id ────────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "cdc_id"},
@@ -44,8 +40,6 @@
       },
       "meta": {}
     },
-
-    // ── op ────────────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "op"},
@@ -59,8 +53,6 @@
       },
       "meta": {}
     },
-
-    // ── ts_ms ─────────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "ts_ms"},
@@ -71,8 +63,6 @@
       "kwargs": {"column": "ts_ms", "min_value": 1000000000000, "max_value": null},
       "meta": {"notes": "Epoch ms sanity check."}
     },
-
-    // ── source_db / source_table ──────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "source_db"},
@@ -83,19 +73,15 @@
       "kwargs": {"column": "source_table"},
       "meta": {}
     },
-
-    // ── after ────────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "after",
         "row_condition": "op in ('c', 'u', 'r')",
-        "condition_parser": "great_expectations__experimental"
+        "condition_parser": "great_expectations__experimental__"
       },
       "meta": {}
     },
-
-    // ── ingested_at ───────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "ingested_at"},

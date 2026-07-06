@@ -7,8 +7,6 @@
     "notes": "Silver — silver.orders. Deduplicated, typed orders from CDC. Enforce business keys, valid status values, non-negative amounts, and referential integrity markers."
   },
   "expectations": [
-
-    // ── Table-level ─────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_table_row_count_to_be_between",
       "kwargs": {"min_value": 1, "max_value": null},
@@ -22,10 +20,8 @@
           "created_at", "updated_at", "_source_op", "_ingested_at"
         ]
       },
-      "meta": {}
+      "meta": {"notes": "Schema guard — must match the Silver DDL exactly."}
     },
-
-    // ── order_id ──────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "order_id"},
@@ -41,8 +37,6 @@
       "kwargs": {"column": "order_id", "min_value": 1, "max_value": 128},
       "meta": {}
     },
-
-    // ── customer_id ───────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "customer_id"},
@@ -53,19 +47,15 @@
       "kwargs": {"column": "customer_id", "min_value": 1, "max_value": 128},
       "meta": {}
     },
-
-    // ── status ────────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "status",
-        "value_set": ["pending", "confirmed", "shipped", "delivered", "cancelled"],
+        "value_set": ["pending", "confirmed", "shipped", "delivered", "completed", "cancelled"],
         "mostly": 0.999
       },
-      "meta": {"notes": "0.1% tolerance for future status values arriving before schema update."}
+      "meta": {"notes": "Full lifecycle emitted by the traffic generator (STATUS_FLOW). 0.1% tolerance for future status values arriving before schema update."}
     },
-
-    // ── total_amount ──────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_be_between",
       "kwargs": {
@@ -76,8 +66,6 @@
       },
       "meta": {"notes": "Negative totals would indicate a refund applied at source — flag for review."}
     },
-
-    // ── currency ──────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_match_regex",
       "kwargs": {
@@ -85,10 +73,8 @@
         "regex": "^[A-Z]{3}$",
         "mostly": 0.999
       },
-      "meta": {"notes": "ISO 4217 three-letter code."}
+      "meta": {"notes": "ISO 4217 three-letter code. Currently always null (source has no currency column); nulls are skipped by this check."}
     },
-
-    // ── created_at ────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "created_at"},
@@ -103,8 +89,6 @@
       },
       "meta": {"notes": "Freshness: latest order must be after project go-live."}
     },
-
-    // ── updated_at >= created_at ──────────────────────────────────────────────
     {
       "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
       "kwargs": {
@@ -115,28 +99,17 @@
       },
       "meta": {"notes": "updated_at must be >= created_at."}
     },
-
-    // ── _source_op ────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "_source_op",
-        "value_set": ["c", "u", "d"]
+        "value_set": ["c", "u", "r"]
       },
-      "meta": {}
+      "meta": {"notes": "Batch keeps UPSERT_OPS (c/u/r); deletes never reach Silver. r = Debezium snapshot read."}
     },
-
-    // ── _ingested_at ──────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "_ingested_at"},
-      "meta": {}
-    },
-
-    // ── No null business keys ─────────────────────────────────────────────────
-    {
-      "expectation_type": "expect_multicolumn_values_to_be_unique",
-      "kwargs": {"column_list": ["order_id"]},
       "meta": {}
     }
   ]

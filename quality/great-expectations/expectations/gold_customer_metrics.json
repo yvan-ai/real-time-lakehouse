@@ -7,8 +7,6 @@
     "notes": "Gold — gold.customer_metrics. Customer LTV and behavioural KPIs. Validate PK uniqueness, date ordering, non-negative counts, churn flag logic, and revenue consistency."
   },
   "expectations": [
-
-    // ── Table-level ─────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_table_row_count_to_be_between",
       "kwargs": {"min_value": 1, "max_value": null},
@@ -25,8 +23,6 @@
       },
       "meta": {}
     },
-
-    // ── customer_id ───────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "customer_id"},
@@ -37,8 +33,6 @@
       "kwargs": {"column": "customer_id"},
       "meta": {"notes": "One row per customer — gold is a full refresh per bucket."}
     },
-
-    // ── country_code ──────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_match_regex",
       "kwargs": {
@@ -46,10 +40,8 @@
         "regex": "^[A-Z]{2}$",
         "mostly": 0.999
       },
-      "meta": {}
+      "meta": {"notes": "Currently always null (dropped from the CDC source); nulls are skipped by this check."}
     },
-
-    // ── segment ───────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
@@ -57,10 +49,8 @@
         "value_set": ["consumer", "business", "vip"],
         "mostly": 0.999
       },
-      "meta": {}
+      "meta": {"notes": "Currently always null (dropped from the CDC source); nulls are skipped by this check."}
     },
-
-    // ── last_order_date >= first_order_date ───────────────────────────────────
     {
       "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
       "kwargs": {
@@ -71,8 +61,6 @@
       },
       "meta": {"notes": "last_order_date cannot precede first_order_date."}
     },
-
-    // ── total_orders ──────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "total_orders"},
@@ -80,11 +68,9 @@
     },
     {
       "expectation_type": "expect_column_values_to_be_between",
-      "kwargs": {"column": "total_orders", "min_value": 1, "max_value": null},
-      "meta": {"notes": "Customers in this table must have at least one order."}
+      "kwargs": {"column": "total_orders", "min_value": 0, "max_value": null},
+      "meta": {"notes": "Left join from silver.customers — customers without a revenue order have total_orders = 0."}
     },
-
-    // ── total_revenue ─────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "total_revenue"},
@@ -95,15 +81,11 @@
       "kwargs": {"column": "total_revenue", "min_value": 0.0, "max_value": null},
       "meta": {}
     },
-
-    // ── avg_order_value ───────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_be_between",
       "kwargs": {"column": "avg_order_value", "min_value": 0.0, "max_value": null},
       "meta": {}
     },
-
-    // ── days_since_last_order ─────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_be_between",
       "kwargs": {
@@ -113,20 +95,14 @@
       },
       "meta": {"notes": "Non-negative; cap at 100 years to catch computation errors."}
     },
-
-    // ── is_churned consistency with days_since_last_order > 90 ───────────────
-    // GX custom expectation — approximated via proportion check:
-    // if days_since_last_order > 90 then is_churned should be true (validated in runner.py)
     {
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "is_churned",
         "value_set": [true, false]
       },
-      "meta": {"notes": "Boolean guard. Cross-column churn logic verified in runner.py custom check."}
+      "meta": {"notes": "Boolean guard. Cross-column churn logic (days_since_last_order > 90 => is_churned) is verified in runner.py custom check."}
     },
-
-    // ── computed_at ───────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "computed_at"},

@@ -7,8 +7,6 @@
     "notes": "Gold — gold.daily_revenue. Pre-aggregated daily metrics for dashboards. Strictest layer: compound PK uniqueness, non-negative KPIs, referential arithmetic consistency."
   },
   "expectations": [
-
-    // ── Table-level ─────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_table_row_count_to_be_between",
       "kwargs": {"min_value": 1, "max_value": null},
@@ -25,8 +23,6 @@
       },
       "meta": {}
     },
-
-    // ── report_date ───────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "report_date"},
@@ -41,8 +37,6 @@
       },
       "meta": {"notes": "Latest report date must be after project go-live."}
     },
-
-    // ── currency ──────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "currency"},
@@ -56,15 +50,11 @@
       },
       "meta": {}
     },
-
-    // ── (report_date, currency) compound PK ──────────────────────────────────
     {
       "expectation_type": "expect_compound_columns_to_be_unique",
       "kwargs": {"column_list": ["report_date", "currency"]},
       "meta": {"notes": "Each (date, currency) pair must appear exactly once."}
     },
-
-    // ── order_count ───────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "order_count"},
@@ -75,8 +65,6 @@
       "kwargs": {"column": "order_count", "min_value": 0, "max_value": null},
       "meta": {}
     },
-
-    // ── item_count ────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_be_between",
       "kwargs": {"column": "item_count", "min_value": 0, "max_value": null},
@@ -92,8 +80,6 @@
       },
       "meta": {"notes": "Items sold >= orders (each order has >= 1 item)."}
     },
-
-    // ── gross_revenue ─────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "gross_revenue"},
@@ -104,8 +90,6 @@
       "kwargs": {"column": "gross_revenue", "min_value": 0.0, "max_value": null},
       "meta": {}
     },
-
-    // ── net_revenue ───────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "net_revenue"},
@@ -126,22 +110,16 @@
       },
       "meta": {"notes": "gross_revenue >= net_revenue (discounts reduce net)."}
     },
-
-    // ── avg_order_value ───────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_be_between",
       "kwargs": {"column": "avg_order_value", "min_value": 0.0, "max_value": null},
       "meta": {}
     },
-
-    // ── new_customers ─────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_be_between",
       "kwargs": {"column": "new_customers", "min_value": 0, "max_value": null},
       "meta": {}
     },
-
-    // ── computed_at ───────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "computed_at"},

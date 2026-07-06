@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS iceberg.silver.orders (
     order_id      STRING         NOT NULL COMMENT 'Business primary key',
     customer_id   STRING         NOT NULL COMMENT 'FK to silver.customers',
-    status        STRING         COMMENT 'pending / confirmed / shipped / delivered / cancelled',
+    status        STRING         COMMENT 'pending / confirmed / shipped / delivered / completed / cancelled',
     total_amount  DECIMAL(18, 2) COMMENT 'Order total in native currency',
     currency      STRING         COMMENT 'ISO 4217 currency code',
     created_at    TIMESTAMP      COMMENT 'Order creation timestamp from source',

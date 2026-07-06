@@ -7,8 +7,6 @@
     "notes": "Bronze — raw.kafka_events. Append-only Kafka capture. Validate presence, types, and structural invariants. No business rules at this layer."
   },
   "expectations": [
-
-    // ── Table-level ─────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_table_row_count_to_be_between",
       "kwargs": {"min_value": 1, "max_value": null},
@@ -24,8 +22,6 @@
       },
       "meta": {"notes": "Schema guard — fail if columns are added/removed/reordered."}
     },
-
-    // ── event_id ─────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "event_id"},
@@ -44,8 +40,6 @@
       },
       "meta": {"notes": "UUID v4 format."}
     },
-
-    // ── topic ─────────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "topic"},
@@ -59,8 +53,6 @@
       },
       "meta": {"notes": "Kafka topic names: alphanumeric, dots, dashes, underscores only."}
     },
-
-    // ── partition ─────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "partition"},
@@ -71,8 +63,6 @@
       "kwargs": {"column": "partition", "min_value": 0, "max_value": null},
       "meta": {}
     },
-
-    // ── offset ────────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "offset"},
@@ -83,8 +73,6 @@
       "kwargs": {"column": "offset", "min_value": 0, "max_value": null},
       "meta": {}
     },
-
-    // ── event_ts ──────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "event_ts"},
@@ -99,15 +87,11 @@
       },
       "meta": {"notes": "Freshness check — latest event must be after project start date."}
     },
-
-    // ── ingested_at ───────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "ingested_at"},
       "meta": {}
     },
-
-    // ── payload ───────────────────────────────────────────────────────────────
     {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "payload"},

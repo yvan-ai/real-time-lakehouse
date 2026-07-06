@@ -24,6 +24,12 @@ validations:
       data_asset_name: raw.cdc_customers
     expectation_suite_name: bronze_cdc_customers
 
+  - batch_request:
+      datasource_name: trino_lakehouse
+      data_connector_name: default_inferred_data_connector_name
+      data_asset_name: raw.cdc_order_items
+    expectation_suite_name: bronze_cdc_order_items
+
 action_list:
   - name: store_validation_result
     action:
