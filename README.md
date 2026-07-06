@@ -1,6 +1,7 @@
 # Real-Time Lakehouse
 
 [![CI](https://github.com/yvan-ai/real-time-lakehouse/actions/workflows/ci.yml/badge.svg)](https://github.com/yvan-ai/real-time-lakehouse/actions/workflows/ci.yml)
+[![Data Docs](https://img.shields.io/badge/GX-Data%20Docs-ff6310.svg)](https://yvan-ai.github.io/real-time-lakehouse/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![Spark 3.5](https://img.shields.io/badge/Apache%20Spark-3.5-e25a1c.svg)](https://spark.apache.org/)
@@ -74,10 +75,11 @@ Two paths consume the same CDC stream:
 | Catalog | Nessie 0.62 | Iceberg REST catalog (no Hive metastore) |
 | Object store | MinIO | S3-compatible warehouse storage |
 | Query engine | Trino 435 | Federated SQL over Iceberg |
-| Data quality | Great Expectations | Expectation suites per medallion layer |
+| Data quality | Great Expectations | Suites per layer + post-batch quality gate (K8s Job) |
+| Lineage | OpenLineage + Marquez | Automatic Spark lineage, declarative CDC/Flink graph |
 | Orchestration | Kubernetes (k3s) + Kustomize | Declarative deployment, WSL2-friendly |
-| GitOps / CI | ArgoCD + GitHub Actions | Lint, tests, image build, auto-sync |
-| Observability | Prometheus + Grafana | Kafka / Flink / cluster dashboards & alert rules |
+| GitOps / CI | ArgoCD + GitHub Actions | Lint, tests, image build, auto-sync, Data Docs on Pages |
+| Observability | Prometheus + Grafana | Pipeline / Kafka / Flink dashboards & runbook'd alerts |
 
 ## Key features
 
@@ -106,6 +108,7 @@ Two paths consume the same CDC stream:
 ./scripts/run-iceberg-init.sh
 
 # 3. Run the batch pipeline Bronze → Silver → Gold
+#    (on success the Great Expectations quality gate runs automatically)
 ./scripts/run-batch.sh
 
 # 4. Query with Trino
@@ -201,19 +204,40 @@ Key choices are documented as ADRs in [docs/decisions/](docs/decisions/):
 
 - **Unit tests** (`quality/tests/`) — CDC envelope parsing, last-write-wins deduplication,
   revenue/churn business rules, run against a local SparkSession in CI.
-- **Data quality** (`quality/great-expectations/`) — one expectation suite per table,
+- **Data quality gate** (`quality/great-expectations/`) — one expectation suite per table,
   checkpoints per layer, plus a custom cross-column churn-consistency check via Trino.
+  After every batch, a `quality-gate` Kubernetes Job replays all suites against Trino:
+  any failed expectation turns the Job red, pushes `gx_*` metrics to Prometheus and fires
+  the `QualityGateFailed` alert ([ADR-0007](docs/decisions/0007-quality-gate-as-deployment-blocker.md)).
+  Browsable suites: [Data Docs](https://yvan-ai.github.io/real-time-lakehouse/), published by CI.
 - **Manifest validation** — every PR renders the full Kustomize overlay and validates it
   with kubeconform.
 - **Static analysis** — ruff (lint + format), mypy, yamllint, pre-commit hooks.
 
+## Data lineage
+
+Marquez (namespace `lineage`) stores the OpenLineage graph
+([ADR-0008](docs/decisions/0008-openlineage-marquez.md)):
+
+- **Spark — automatic**: the batch Job loads `openlineage-spark` and emits the
+  Bronze→Silver→Gold graph (Kafka source included, schema facets) on every run.
+- **Debezium & Flink — declarative**: [scripts/register_lineage.py](scripts/register_lineage.py)
+  registers Postgres → `debezium.public.*` (connector) and
+  `debezium.public.orders` → `gold.order-revenue-1m` (Flink job) via the OpenLineage API.
+
+```bash
+kubectl port-forward svc/marquez 5000:5000 -n lineage &
+python3 scripts/register_lineage.py                        # upstream edges
+kubectl port-forward svc/marquez-web 3000:3000 -n lineage  # → http://localhost:3000
+```
+
 ## Roadmap
 
-Next three pillars — detailed action plan in [docs/roadmap.md](docs/roadmap.md):
+The three pillars from [docs/roadmap.md](docs/roadmap.md) are implemented:
 
-- [ ] **Data quality**: automated Great Expectations gate after each batch + published Data Docs
-- [ ] **Observability**: pipeline business dashboard, postgres/MinIO exporters, actionable alerts
-- [ ] **Lineage**: OpenLineage + Marquez — automatic Spark lineage, declarative CDC graph
+- [x] **Data quality**: automated Great Expectations gate after each batch + published Data Docs
+- [x] **Observability**: pipeline business dashboard, postgres/MinIO exporters, actionable alerts
+- [x] **Lineage**: OpenLineage + Marquez — automatic Spark lineage, declarative CDC graph
 
 Longer term:
 

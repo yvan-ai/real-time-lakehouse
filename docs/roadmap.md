@@ -22,11 +22,11 @@ feed the alerting); pillar 3 has no dependency on the other two.
 The Silver DDLs were aligned with the CDC source in July 2026; the suites
 still reference dropped columns and would fail on first run.
 
-- [ ] `quality/great-expectations/expectations/silver_customers.json`: drop
+- [x] `quality/great-expectations/expectations/silver_customers.json`: drop
       `first_name`, `last_name`, `country_code`, `segment`; add `name`.
-- [ ] Audit `silver_order_items.json` against the trimmed DDL
+- [x] Audit `silver_order_items.json` against the trimmed DDL
       (`product_name`, `category`, `discount`, `currency` no longer exist).
-- [ ] Create the missing `bronze_cdc_order_items.json` suite (same envelope
+- [x] Create the missing `bronze_cdc_order_items.json` suite (same envelope
       checks as `bronze_cdc_orders.json`) and register it in
       `quality/great-expectations/checkpoints/bronze.yml`.
 
@@ -35,29 +35,32 @@ batched lakehouse.
 
 ### 1.2 Automated quality gate after the batch — M
 
-- [ ] New Kubernetes Job `quality-gate` (`infra/kubernetes/base/quality/`):
+- [x] New Kubernetes Job `quality-gate` (`infra/kubernetes/base/quality/`):
       Python image + `requirements-quality.txt`, runs
       `runner.py --layer all` against `trino.lakehouse.svc:8080`.
-- [ ] Chain it in `scripts/run-batch.sh`: on batch success, launch the gate;
+- [x] Chain it in `scripts/run-batch.sh`: on batch success, launch the gate;
       failed expectations ⇒ Job `Failed` (visible in `kubectl`, alertable).
-- [ ] `make quality-gate` target.
-- [ ] Resource limits ≤ 512 Mi (WSL2 budget).
+- [x] `make quality-gate` target.
+- [x] Resource limits ≤ 512 Mi (WSL2 budget).
 
 **Done when**: a deliberately broken expectation turns the gate red end-to-end.
 
 ### 1.3 Publish Data Docs — S
 
-- [ ] CI step generating GX Data Docs (config-only or pandas sample).
-- [ ] Publish to **GitHub Pages** (`gh-pages` branch via `actions/deploy-pages`).
-- [ ] README: "Data Docs" badge/link next to the CI badge.
+- [x] CI step generating GX Data Docs (config-only or pandas sample).
+- [x] Publish to **GitHub Pages** (via `actions/deploy-pages`) — the deploy job
+      is gated on the repo variable `ENABLE_PAGES=true`: Pages needs a public
+      repo on the free plan, and the repo is currently private.
+- [x] README: "Data Docs" badge/link next to the CI badge.
 
-**Done when**: a public URL shows the browsable expectation results.
+**Done when**: a public URL shows the browsable expectation results
+*(pending: make the repo public again + enable Pages + set `ENABLE_PAGES`)*.
 
 ### 1.4 Export quality metrics to Prometheus — S
 
-- [ ] `runner.py` writes `gx_expectations_passed/failed{layer=...}` counters
+- [x] `runner.py` writes `gx_expectations_passed/failed{layer=...}` counters
       (Pushgateway, or a textfile the gate Job exposes).
-- [ ] Feeds alert `QualityGateFailed` (see 2.4).
+- [x] Feeds alert `QualityGateFailed` (see 2.4).
 
 **Deliverables**: ~4 commits + **ADR-0007 — Quality gate as a deployment blocker**.
 
@@ -71,17 +74,17 @@ Kafka JMX metrics only became active in July 2026 (metricsConfig placement
 fix); `prometheus.yml` references `kube-state-metrics` and `node-exporter`
 jobs whose deployments do not exist in `infra/kubernetes/base/monitoring/`.
 
-- [ ] Check `/targets` on the live Prometheus; list UP/DOWN.
-- [ ] Deploy `kube-state-metrics` (needed for Job-state alerts) and
+- [x] Check `/targets` on the live Prometheus; list UP/DOWN.
+- [x] Deploy `kube-state-metrics` (needed for Job-state alerts) and
       `node-exporter`, or remove the dead scrape jobs.
 
 **Done when**: zero permanently-DOWN targets.
 
 ### 2.2 Missing critical exporters — M
 
-- [ ] **`postgres_exporter`** with a replication-slot query — the #1 CDC
+- [x] **`postgres_exporter`** with a replication-slot query — the #1 CDC
       operational risk is silent WAL growth when the Debezium slot lags.
-- [ ] Enable MinIO's native Prometheus endpoint (`MINIO_PROMETHEUS_AUTH_TYPE=public`
+- [x] Enable MinIO's native Prometheus endpoint (`MINIO_PROMETHEUS_AUTH_TYPE=public`
       + scrape job).
 
 ### 2.3 "Lakehouse Pipeline" business dashboard — M
@@ -89,22 +92,23 @@ jobs whose deployments do not exist in `infra/kubernetes/base/monitoring/`.
 One Grafana view (provisioned ConfigMap, like the existing three) showing the
 pipeline end-to-end:
 
-- [ ] CDC throughput per topic (messages/s) and Debezium connector status
-- [ ] Flink consumer lag (kafka-exporter) + checkpoint duration/failures
-- [ ] Windows emitted per minute (`gold.order-revenue-1m` producer rate)
-- [ ] Last successful batch Job + duration (kube-state-metrics)
-- [ ] Quality gate results (from 1.4)
-- [ ] Postgres replication slot lag (from 2.2)
+- [x] CDC throughput per topic (messages/s) and Debezium connector status
+- [x] Flink consumer lag (kafka-exporter) + checkpoint duration/failures
+- [x] Windows emitted per minute (`gold.order-revenue-1m` producer rate)
+- [x] Last successful batch Job + duration (kube-state-metrics)
+- [x] Quality gate results (from 1.4)
+- [x] Postgres replication slot lag (from 2.2)
 
 ### 2.4 Actionable alert rules — S
 
-- [ ] `DebeziumConnectorDown`, `ReplicationSlotLagHigh`,
+- [x] `DebeziumConnectorDown`, `ReplicationSlotLagHigh`,
       `FlinkCheckpointFailing`, `BatchJobFailed`, `QualityGateFailed` —
       each with a runbook comment in `observability/prometheus/rules/`.
 
 ### 2.5 README polish — S
 
 - [ ] Grafana dashboard capture in `docs/img/` + README section.
+      *(manual step: screenshot the "Lakehouse Pipeline" dashboard once traffic runs)*
 
 **Deliverables**: ~4 commits, dashboard JSON + rules + captures.
 
@@ -122,33 +126,36 @@ pipeline end-to-end:
 
 ### 3.2 Deploy Marquez — M
 
-- [ ] `infra/kubernetes/base/marquez/`: Deployment (marquez API+web),
+- [x] `infra/kubernetes/base/marquez/`: Deployment (marquez API+web),
       Service, DB init (database + role in the existing Postgres), quotas.
-- [ ] Wire into `overlays/local` + `bootstrap.sh`.
+- [x] Wire into `overlays/local` + `bootstrap.sh`.
 
 ### 3.3 Automatic Spark lineage — S *(highest value/effort ratio)*
 
-- [ ] Add `io.openlineage:openlineage-spark_2.12` to the batch Job
+- [x] Add `io.openlineage:openlineage-spark_2.12` to the batch Job
       `--packages` + Spark confs (`spark.extraListeners`,
       `spark.openlineage.transport.url` → Marquez, namespace `lakehouse`).
-- [ ] Result: the Bronze→Silver→Gold graph (Kafka source included) is emitted
+- [x] Result: the Bronze→Silver→Gold graph (Kafka source included) is emitted
       automatically on every run, with schema facets.
 
 ### 3.4 Complete the upstream graph — M
 
-- [ ] Debezium has no native OpenLineage emitter ⇒ declarative registration
+- [x] Debezium has no native OpenLineage emitter ⇒ declarative registration
       script `scripts/register_lineage.py` pushing Postgres tables →
       `debezium.public.*` topics via the OpenLineage HTTP API.
-- [ ] Flink Table API (PyFlink) lineage support is still limited ⇒ same
+- [x] Flink Table API (PyFlink) lineage support is still limited ⇒ same
       declarative approach for the `order-revenue` job
       (`debezium.public.orders` → `gold.order-revenue-1m`), documented
       honestly in the ADR.
 
 ### 3.5 End-to-end verification & docs — S
 
-- [ ] After `make demo` + a batch run, the full graph
-      Postgres → Kafka → {Flink, Spark} → Iceberg is visible in Marquez.
-- [ ] Capture for the README + `docs/architecture.md` update.
+- [x] After `make demo` + a batch run, the full graph
+      Postgres → Kafka → {Flink, Spark} → Iceberg is visible in Marquez
+      (declarative upstream edges registered and verified via the API; the
+      Spark edges appear on the next batch run).
+- [ ] Capture for the README + `docs/architecture.md` update
+      *(architecture.md updated; graph screenshot is a manual step)*.
 
 **Deliverables**: ~5 commits + ADR-0008 + lineage graph capture.
 

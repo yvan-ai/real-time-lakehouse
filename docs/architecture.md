@@ -83,13 +83,37 @@ Table properties (see [data/models/iceberg/](../data/models/iceberg/)):
 
 ## Data quality
 
-- **Great Expectations** — one suite per table (8 suites), one checkpoint per layer,
+- **Great Expectations** — one suite per table (9 suites), one checkpoint per layer,
   executed by [quality/great-expectations/runner.py](../quality/great-expectations/runner.py)
   against Trino. A custom cross-column check asserts churn-flag consistency in Gold.
+- **Quality gate** ([ADR-0007](decisions/0007-quality-gate-as-deployment-blocker.md)) —
+  after every batch, `scripts/run-batch.sh` launches the `quality-gate` Job
+  (namespace `data-quality`): any failed expectation turns the Job `Failed`, pushes
+  `gx_*` metrics to the Pushgateway and fires the `QualityGateFailed` alert. While the
+  gate is red, the affected Gold tables must not be consumed. Manual run:
+  `make quality-gate`.
+- **Data Docs** — CI renders the suites and publishes them to
+  [GitHub Pages](https://yvan-ai.github.io/real-time-lakehouse/) on every push to `main`.
 - **Unit tests** — the shared transformation functions are pure DataFrame→DataFrame and
   tested with a local SparkSession in CI (no cluster needed).
 - **Contracts** — [data/contracts/](../data/contracts/) defines ownership, SLAs and schema
   guarantees for the CDC streams; [data/schemas/](../data/schemas/) holds the JSON Schemas.
+
+## Data lineage
+
+Marquez (namespace `lineage`, [ADR-0008](decisions/0008-openlineage-marquez.md)) stores
+the OpenLineage graph, reusing the shared Postgres (dedicated `marquez` database):
+
+- **Spark — automatic**: the batch Job loads `openlineage-spark` and emits every run's
+  Bronze→Silver→Gold graph (Kafka source included, schema facets) to
+  `http://marquez.lineage.svc:5000`, namespace `lakehouse`.
+- **Debezium & Flink — declarative**:
+  [scripts/register_lineage.py](../scripts/register_lineage.py) posts static run events
+  for the edges without a native emitter — Postgres tables → `debezium.public.*`
+  (connector) and `debezium.public.orders` → `gold.order-revenue-1m` (Flink job).
+  These edges must be kept in sync with the pipeline topology by hand.
+- **UI**: `kubectl port-forward svc/marquez-web 3000:3000 -n lineage` →
+  <http://localhost:3000>.
 
 ## Deployment & GitOps
 
@@ -115,7 +139,9 @@ The whole stack runs inside WSL2 with a 16 GB host. Every pod defines
 | MinIO | 256 Mi | 512 Mi |
 | Nessie | 256 Mi | 512 Mi |
 | Postgres | 256 Mi | 512 Mi |
-| Prometheus + Grafana | 512 Mi | 1 Gi |
+| Monitoring (Prometheus, Grafana, exporters, Pushgateway) | 768 Mi | 1.5 Gi |
+| Marquez (API + web) | 320 Mi | 512 Mi |
+| Quality gate Job (ephemeral) | 256 Mi | 512 Mi |
 
 Rule of thumb: run the batch Job while Flink is idle (or scale the FlinkDeployment down)
 when RAM is tight.
