@@ -233,20 +233,21 @@ kubectl port-forward svc/marquez-web 3000:3000 -n lineage  # → http://localhos
 
 ## Roadmap
 
-The three pillars from [docs/roadmap.md](docs/roadmap.md) are implemented:
+The three pillars of [docs/roadmap.md](docs/roadmap.md) are implemented:
 
 - [x] **Data quality**: automated Great Expectations gate after each batch + published Data Docs
 - [x] **Observability**: pipeline business dashboard, postgres/MinIO exporters, actionable alerts
 - [x] **Lineage**: OpenLineage + Marquez — automatic Spark lineage, declarative CDC graph
 
-Longer term:
+Next iteration (detailed plan in [docs/roadmap.md](docs/roadmap.md#roadmap-v2--orchestration-transformation--serving)):
 
-- [ ] dbt models on Trino for the Gold layer (replace PySpark aggregations)
-- [ ] Airflow DAG to schedule the batch pipeline
-- [ ] External Secrets Operator for credential management
-- [ ] Terraform modules for a cloud deployment (EKS + MSK + S3)
-- [ ] Iceberg maintenance jobs (compaction, snapshot expiry) on a schedule
-- [ ] Prebaked Spark batch image (jars bundled) instead of runtime `--packages` downloads
+- [ ] **Airflow** — DAG-driven pipeline with the quality gate as a blocking task
+- [ ] **dbt Core on Trino** — SQL-first Gold layer, tested, emitting lineage to Marquez
+- [ ] **ArgoCD effectif** — cluster reconciled from git, no manual `kubectl apply`
+- [ ] **Terraform** — declarative bootstrap (local) + EKS/MSK/S3 skeleton (cloud path)
+- [ ] **Second ingestion path** — Polars loader for an external API → `raw.kafka_events`
+- [ ] **Superset** — BI dashboard on the Gold tables through Trino
+- [ ] Hardening: prebaked Spark image, Iceberg maintenance DAG, External Secrets Operator
 
 ## Contact
 
