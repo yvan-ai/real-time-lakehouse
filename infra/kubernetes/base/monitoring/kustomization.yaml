@@ -5,3 +5,6 @@ resources:
   - kafka-jmx-config.yaml
   - prometheus.yaml
   - grafana.yaml
+  - kube-state-metrics.yaml
+  - node-exporter.yaml
+  - pushgateway.yaml

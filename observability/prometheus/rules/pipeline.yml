@@ -1,0 +1,114 @@
+# End-to-end pipeline alerts — CDC → Kafka → Flink/Spark → Iceberg → quality gate.
+# Each alert carries a runbook comment: what it means, how to confirm, how to fix.
+groups:
+  - name: pipeline.rules
+    interval: 30s
+    rules:
+
+      # ── DebeziumConnectorDown ────────────────────────────────────────────
+      # Meaning : the Debezium source connector (or its single task) is not
+      #           RUNNING — CDC events stop flowing and the replication slot
+      #           starts retaining WAL (see ReplicationSlotLagHigh).
+      # Confirm : kubectl get kafkaconnector debezium-postgres -n streaming
+      #           kubectl logs debezium-connect-connect-0 -n streaming --tail=100
+      # Fix     : restart the connector without touching the pod:
+      #             kubectl annotate kafkaconnector debezium-postgres -n streaming \
+      #               strimzi.io/restart=true
+      #           If the broker was recreated (ephemeral storage), the connector
+      #           re-snapshots automatically once restarted.
+      - alert: DebeziumConnectorDown
+        expr: >
+          sum(kafka_connect_connector_task_status{connector="debezium-postgres", status="running"}) < 1
+          or
+          absent(kafka_connect_connector_task_status{connector="debezium-postgres"})
+        for: 5m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Debezium connector debezium-postgres is not running"
+          description: "No RUNNING task for the CDC connector for 5 min — WAL is accumulating."
+
+      # ── ReplicationSlotLagHigh ───────────────────────────────────────────
+      # Meaning : PostgreSQL retains WAL for the Debezium slot faster than the
+      #           connector consumes it. Left unchecked this fills the postgres
+      #           PVC and takes the whole source database down.
+      # Confirm : kubectl exec deploy/postgres -n streaming -- psql -U postgres -d lakehouse \
+      #             -c "SELECT slot_name, active, pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) FROM pg_replication_slots;"
+      # Fix     : if the connector is down, restart it (see DebeziumConnectorDown).
+      #           If the slot is orphaned (old slot name after a connector rename):
+      #             SELECT pg_drop_replication_slot('<old_slot>');
+      - alert: ReplicationSlotLagHigh
+        expr: pg_replication_slots_lag_bytes{slot_type="logical"} > 268435456
+        for: 15m
+        labels:
+          severity: warning
+          team: data-platform
+        annotations:
+          summary: "Replication slot {{ $labels.slot_name }} retains {{ $value | humanize1024 }}B of WAL"
+          description: "Logical slot lag above 256 MiB for 15 min — Debezium is down or too slow."
+
+      # ── FlinkCheckpointFailing ───────────────────────────────────────────
+      # Meaning : the hot path lost its exactly-once guarantee — checkpoints
+      #           are failing outright, or none has completed in 10 min on a
+      #           job that has been up for more than 10 min.
+      # Confirm : kubectl logs deploy/order-revenue-job -n flink --tail=100
+      #           Look for S3/MinIO timeouts (checkpoint storage) or Kafka
+      #           transaction errors.
+      # Fix     : check MinIO health, then restart the job statelessly:
+      #             kubectl patch flinkdeployment order-revenue-job -n flink --type merge \
+      #               -p '{"spec":{"restartNonce": <increment>}}'
+      - alert: FlinkCheckpointFailing
+        expr: >
+          increase(flink_jobmanager_job_numberOfFailedCheckpoints[10m]) > 0
+          or
+          (
+            increase(flink_jobmanager_job_numberOfCompletedCheckpoints[10m]) == 0
+            and flink_jobmanager_job_uptime > 600000
+          )
+        for: 0m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Flink checkpointing unhealthy for {{ $labels.job_name }}"
+          description: "Failed checkpoint(s) or no completed checkpoint in 10 min — exactly-once at risk."
+
+      # ── BatchJobFailed ───────────────────────────────────────────────────
+      # Meaning : the Bronze→Silver→Gold Spark batch Job ended in Failed state.
+      #           Gold tables are stale until a successful re-run.
+      # Confirm : kubectl logs -n spark -l app=batch-pipeline --tail=100
+      # Fix     : most common cause is a Maven Central download flake
+      #           (runtime --packages). Re-run with ./scripts/run-batch.sh.
+      #           Real transform errors: fix the job, then re-run.
+      - alert: BatchJobFailed
+        expr: kube_job_status_failed{namespace="spark", job_name=~"batch-pipeline.*"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Spark batch pipeline failed"
+          description: "Job {{ $labels.job_name }} is Failed — Gold tables are stale."
+
+      # ── QualityGateFailed ────────────────────────────────────────────────
+      # Meaning : Great Expectations found bad data after the batch (or the
+      #           gate Job itself errored). Per ADR-0007 the affected tables
+      #           must not be promoted/consumed until the gate is green.
+      # Confirm : kubectl logs -n data-quality job/quality-gate --tail=100
+      #           gx_expectations_failed{layer=...} shows which layer is red.
+      # Fix     : inspect the failing suite in the logs / Data Docs, fix the
+      #           pipeline (or the expectation if the rule is stale), then
+      #           re-run: make quality-gate.
+      - alert: QualityGateFailed
+        expr: >
+          gx_quality_gate_success == 0
+          or
+          kube_job_status_failed{namespace="data-quality", job_name="quality-gate"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: data-platform
+        annotations:
+          summary: "Data quality gate failed"
+          description: "GX expectations failed after the last batch — do not consume affected Gold tables."

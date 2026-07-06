@@ -11,6 +11,7 @@ namespace: streaming
   # Uncomment the line below when ESO is installed:
   # - debezium-db-credentials.yaml
 resources:
+- connect-metrics.yaml
 - kafka-connect.yaml
 - debezium-postgres.yaml
 

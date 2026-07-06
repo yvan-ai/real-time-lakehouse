@@ -8,6 +8,7 @@ resources:
   - pvc.yaml
   - deployment.yaml
   - service.yaml
+  - exporter.yaml
   # postgres-credentials.yaml (ExternalSecret) excluded — requires ESO CRDs.
   # Create the secret manually before applying:
   #   kubectl create secret generic postgres-credentials -n streaming \

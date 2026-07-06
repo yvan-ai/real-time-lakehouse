@@ -19,6 +19,14 @@ spec:
   offsetStorageTopic: debezium-connect-offsets
   configStorageTopic: debezium-connect-configs
   statusStorageTopic: debezium-connect-status
+  # JMX metrics on :9404 — connector/task status + Debezium lag
+  # (scraped by the Prometheus `kafka-connect` job).
+  metricsConfig:
+    type: jmxPrometheusExporter
+    valueFrom:
+      configMapKeyRef:
+        name: connect-metrics
+        key: connect-metrics-config.yml
   config:
     offset.storage.replication.factor: "1"
     config.storage.replication.factor: "1"

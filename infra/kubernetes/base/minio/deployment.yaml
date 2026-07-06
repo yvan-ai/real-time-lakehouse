@@ -49,6 +49,10 @@ spec:
               value: "lakehouse-local"
             - name: MINIO_BROWSER
               value: "on"
+            # Expose /minio/v2/metrics/* without bearer token — local cluster
+            # only; Prometheus scrapes the `minio` job (see prometheus.yml).
+            - name: MINIO_PROMETHEUS_AUTH_TYPE
+              value: "public"
           ports:
             - name: api
               containerPort: 9000

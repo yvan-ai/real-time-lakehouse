@@ -93,6 +93,11 @@ scrape_configs:
       - source_labels: [__meta_kubernetes_pod_label_strimzi_io_kind]
         action: keep
         regex: Kafka
+      # The entity operator carries strimzi.io/kind=Kafka but has no JMX
+      # exporter — dropping it keeps /targets free of permanent DOWNs.
+      - source_labels: [__meta_kubernetes_pod_label_strimzi_io_name]
+        action: drop
+        regex: .*-entity-operator
       - source_labels: [__address__]
         action: replace
         regex: ([^:]+)(?::\d+)?
@@ -122,6 +127,51 @@ scrape_configs:
         target_label: __address__
       - action: labelmap
         regex: __meta_kubernetes_pod_label_(.+)
+
+  # ── Kafka Connect (Debezium) — JMX Prometheus Exporter on :9404 ───────────
+  - job_name: kafka-connect
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [streaming]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_strimzi_io_kind]
+        action: keep
+        regex: KafkaConnect
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: $1:9404
+        target_label: __address__
+
+  # ── postgres_exporter — replication-slot lag on :9187 ─────────────────────
+  - job_name: postgres-exporter
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [streaming]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: postgres-exporter
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: $1:9187
+        target_label: __address__
+
+  # ── MinIO — native Prometheus endpoint (MINIO_PROMETHEUS_AUTH_TYPE=public) ─
+  - job_name: minio
+    metrics_path: /minio/v2/metrics/cluster
+    static_configs:
+      - targets: [minio.lakehouse.svc.cluster.local:9000]
+
+  # ── Pushgateway — quality-gate gx_* metrics ────────────────────────────────
+  - job_name: pushgateway
+    # honor_labels keeps the pushed job/instance labels.
+    honor_labels: true
+    static_configs:
+      - targets: [pushgateway.monitoring.svc.cluster.local:9091]
 
   # ── Generic annotation-based scraping (all namespaces) ────────────────────
   - job_name: kubernetes-pods

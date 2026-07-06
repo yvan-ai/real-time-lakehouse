@@ -1,0 +1,101 @@
+---
+# postgres_exporter — Postgres metrics for Prometheus, including a custom
+# replication-slot query: the #1 CDC operational risk is silent WAL growth
+# when the Debezium slot lags or its consumer dies. Feeds the
+# ReplicationSlotLagHigh alert and the "Lakehouse Pipeline" dashboard.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-exporter-queries
+  namespace: streaming
+data:
+  queries.yaml: |
+    pg_replication_slots:
+      query: |
+        SELECT slot_name,
+               plugin,
+               slot_type,
+               active::int AS active,
+               COALESCE(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn), 0) AS lag_bytes
+          FROM pg_replication_slots
+      master: true
+      metrics:
+        - slot_name:
+            usage: "LABEL"
+            description: "Replication slot name"
+        - plugin:
+            usage: "LABEL"
+            description: "Logical decoding output plugin"
+        - slot_type:
+            usage: "LABEL"
+            description: "physical or logical"
+        - active:
+            usage: "GAUGE"
+            description: "1 if a consumer is currently connected to the slot"
+        - lag_bytes:
+            usage: "GAUGE"
+            description: "WAL bytes retained for this slot (unconsumed by Debezium)"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-exporter
+  namespace: streaming
+  labels:
+    app: postgres-exporter
+    app.kubernetes.io/part-of: real-time-lakehouse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-exporter
+  template:
+    metadata:
+      labels:
+        app: postgres-exporter
+    spec:
+      securityContext:
+        runAsUser: 65534
+        runAsNonRoot: true
+      containers:
+        - name: postgres-exporter
+          image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+          env:
+            - name: DATA_SOURCE_URI
+              value: "postgres.streaming.svc.cluster.local:5432/lakehouse?sslmode=disable"
+            - name: DATA_SOURCE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: DATA_SOURCE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: PG_EXPORTER_EXTEND_QUERY_PATH
+              value: /etc/postgres-exporter/queries.yaml
+          ports:
+            - name: metrics
+              containerPort: 9187
+          volumeMounts:
+            - name: queries
+              mountPath: /etc/postgres-exporter
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9187
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 10m
+            limits:
+              memory: 128Mi
+              cpu: 100m
+      volumes:
+        - name: queries
+          configMap:
+            name: postgres-exporter-queries

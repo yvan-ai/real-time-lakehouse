@@ -130,6 +130,11 @@ data:
           - source_labels: [__meta_kubernetes_pod_label_strimzi_io_kind]
             action: keep
             regex: Kafka
+          # The entity operator carries strimzi.io/kind=Kafka but has no JMX
+          # exporter — dropping it keeps /targets free of permanent DOWNs.
+          - source_labels: [__meta_kubernetes_pod_label_strimzi_io_name]
+            action: drop
+            regex: .*-entity-operator
           - source_labels: [__address__]
             action: replace
             regex: ([^:]+)(?::\d+)?
@@ -156,6 +161,48 @@ data:
             regex: ([^:]+)(?::\d+)?
             replacement: $1:9308
             target_label: __address__
+
+      - job_name: kafka-connect
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [streaming]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_strimzi_io_kind]
+            action: keep
+            regex: KafkaConnect
+          - source_labels: [__address__]
+            action: replace
+            regex: ([^:]+)(?::\d+)?
+            replacement: $1:9404
+            target_label: __address__
+
+      - job_name: postgres-exporter
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [streaming]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: postgres-exporter
+          - source_labels: [__address__]
+            action: replace
+            regex: ([^:]+)(?::\d+)?
+            replacement: $1:9187
+            target_label: __address__
+
+      - job_name: minio
+        metrics_path: /minio/v2/metrics/cluster
+        static_configs:
+          - targets: [minio.lakehouse.svc.cluster.local:9000]
+
+      - job_name: pushgateway
+        # honor_labels keeps the job/instance labels pushed by the
+        # quality-gate Job instead of overwriting them at scrape time.
+        honor_labels: true
+        static_configs:
+          - targets: [pushgateway.monitoring.svc.cluster.local:9091]
 
       - job_name: kubernetes-pods
         kubernetes_sd_configs:
@@ -240,6 +287,64 @@ data:
             annotations:
               summary: "Flink checkpoint failure for {{ $labels.job_name }}"
 
+  pipeline.yml: |
+    # Runbooks: observability/prometheus/rules/pipeline.yml (same rules, commented).
+    groups:
+      - name: pipeline.rules
+        rules:
+          - alert: DebeziumConnectorDown
+            expr: >
+              sum(kafka_connect_connector_task_status{connector="debezium-postgres", status="running"}) < 1
+              or
+              absent(kafka_connect_connector_task_status{connector="debezium-postgres"})
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Debezium connector debezium-postgres is not running"
+              description: "No RUNNING task for the CDC connector for 5 min — WAL is accumulating."
+          - alert: ReplicationSlotLagHigh
+            expr: pg_replication_slots_lag_bytes{slot_type="logical"} > 268435456
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Replication slot {{ $labels.slot_name }} retains {{ $value | humanize1024 }}B of WAL"
+              description: "Logical slot lag above 256 MiB for 15 min — Debezium is down or too slow."
+          - alert: FlinkCheckpointFailing
+            expr: >
+              increase(flink_jobmanager_job_numberOfFailedCheckpoints[10m]) > 0
+              or
+              (
+                increase(flink_jobmanager_job_numberOfCompletedCheckpoints[10m]) == 0
+                and flink_jobmanager_job_uptime > 600000
+              )
+            for: 0m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Flink checkpointing unhealthy for {{ $labels.job_name }}"
+              description: "Failed checkpoint(s) or no completed checkpoint in 10 min."
+          - alert: BatchJobFailed
+            expr: kube_job_status_failed{namespace="spark", job_name=~"batch-pipeline.*"} > 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Spark batch pipeline failed"
+              description: "Job {{ $labels.job_name }} is Failed — Gold tables are stale."
+          - alert: QualityGateFailed
+            expr: >
+              gx_quality_gate_success == 0
+              or
+              kube_job_status_failed{namespace="data-quality", job_name="quality-gate"} > 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Data quality gate failed"
+              description: "GX expectations failed after the last batch — do not consume affected Gold tables."
+
   kubernetes.yml: |
     groups:
       - name: kubernetes.rules
@@ -278,6 +383,10 @@ metadata:
     app.kubernetes.io/component: server
 spec:
   replicas: 1
+  # Recreate: single-node cluster with tight CPU requests — a rolling update
+  # would need two prometheus pods side by side and stay Pending forever.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: prometheus
