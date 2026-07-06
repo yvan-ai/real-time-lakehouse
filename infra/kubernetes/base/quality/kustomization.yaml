@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Not referenced by the local overlay on purpose: Jobs are immutable, so the
+# quality gate is (re)created by scripts/run-quality-gate.sh, which also
+# refreshes the GX ConfigMaps (quality-gate-project / -expectations /
+# -checkpoints) from quality/great-expectations/.
+resources:
+  - quality-gate-job.yaml

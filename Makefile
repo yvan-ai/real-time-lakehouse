@@ -1,7 +1,7 @@
 # ── Real-time lakehouse — developer entrypoints ──────────────────────────────
 # `make help` lists all targets.
 
-.PHONY: help setup lint format typecheck test validate quality \
+.PHONY: help setup lint format typecheck test validate quality quality-gate \
         bootstrap deploy batch iceberg-init dev-up dev-down demo dashboard clean
 
 PYTHON ?= python3
@@ -36,6 +36,9 @@ validate:        ## Build + validate Kubernetes manifests (kustomize + kubeconfo
 
 quality:         ## Run Great Expectations checkpoints (requires Trino)
 	$(PYTHON) quality/great-expectations/runner.py --layer all
+
+quality-gate:    ## Run the GX quality gate as a Kubernetes Job (needs cluster)
+	./scripts/run-quality-gate.sh
 
 bootstrap:       ## Provision the full local stack (k3s + operators + services)
 	./scripts/bootstrap.sh
