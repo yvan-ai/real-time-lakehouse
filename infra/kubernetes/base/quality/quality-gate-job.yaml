@@ -42,10 +42,17 @@ spec:
               set -euo pipefail
 
               echo "[1/3] Installing quality dependencies..."
-              # Generous retries: runtime downloads are the #1 transient
-              # failure on this cluster (same risk as the Spark --packages).
-              pip install --no-cache-dir --quiet --retries 10 --timeout 60 \
-                -r /gx-src/requirements-quality.txt
+              # Full-command retry loop: pod egress to PyPI drops large
+              # downloads mid-stream on this cluster (same flakiness as the
+              # Spark --packages Maven pulls). pip's own --retries does not
+              # cover a broken pipe inside an already-started transfer.
+              for attempt in 1 2 3 4 5; do
+                pip install --no-cache-dir --quiet --retries 10 --timeout 60 \
+                  -r /gx-src/requirements-quality.txt && break
+                echo "pip install failed (attempt ${attempt}/5) — retrying in 15s..."
+                [[ "${attempt}" == "5" ]] && exit 1
+                sleep 15
+              done
 
               echo "[2/3] Assembling GX project..."
               mkdir -p /gx/expectations /gx/checkpoints /gx/uncommitted
