@@ -1,0 +1,78 @@
+---
+# One-shot init: create the airflow role + database in the EXISTING Postgres
+# (shared instance, ADR-0009 — same pattern as marquez-db-init). Runs in the
+# streaming namespace where both postgres-credentials (admin) and
+# airflow-credentials live.
+#
+# NOT part of the kustomization (Jobs are immutable) — bootstrap.sh deletes
+# and re-applies it. Idempotent: role and database are only created if absent,
+# the role password is re-synced on every run.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: airflow-db-init
+  namespace: streaming
+  labels:
+    app: airflow-db-init
+    app.kubernetes.io/part-of: real-time-lakehouse
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: airflow-db-init
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: postgres:16
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              echo "Creating airflow role + database (if absent)..."
+              psql -v ON_ERROR_STOP=1 -d lakehouse <<SQL
+              DO \$\$
+              BEGIN
+                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${AIRFLOW_DB_USER}') THEN
+                  CREATE ROLE ${AIRFLOW_DB_USER} LOGIN;
+                END IF;
+              END
+              \$\$;
+              ALTER ROLE ${AIRFLOW_DB_USER} WITH LOGIN PASSWORD '${AIRFLOW_DB_PASSWORD}';
+              SELECT 'CREATE DATABASE airflow OWNER ${AIRFLOW_DB_USER}'
+              WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'airflow')\gexec
+              SQL
+              echo "Done."
+          env:
+            - name: PGHOST
+              value: postgres.streaming.svc.cluster.local
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: AIRFLOW_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-credentials
+                  key: AIRFLOW_DB_USER
+            - name: AIRFLOW_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-credentials
+                  key: AIRFLOW_DB_PASSWORD
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 10m
+            limits:
+              memory: 64Mi
+              cpu: 100m

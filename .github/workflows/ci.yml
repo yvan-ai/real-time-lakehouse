@@ -102,6 +102,8 @@ jobs:
              infra/kubernetes/overlays/local/minio.env
           cp infra/kubernetes/overlays/local/marquez.env.example \
              infra/kubernetes/overlays/local/marquez.env
+          cp infra/kubernetes/overlays/local/airflow.env.example \
+             infra/kubernetes/overlays/local/airflow.env
 
       - name: kustomize build — local overlay
         # Render inside the workspace: the kubeconform container only mounts

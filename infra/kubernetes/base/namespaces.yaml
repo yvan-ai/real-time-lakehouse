@@ -183,8 +183,11 @@ metadata:
   namespace: orchestration
 spec:
   hard:
-    requests.memory: "512Mi"
-    limits.memory: "1Gi"
+    # Sized for the standalone Airflow pod (scheduler + webserver in one
+    # container, 768Mi/1.25Gi) — ADR-0009. Task pods run in spark /
+    # data-quality / lineage under their own quotas.
+    requests.memory: "1Gi"
+    limits.memory: "1536Mi"
     requests.cpu: "500m"
     limits.cpu: "2"
     pods: "10"
@@ -205,8 +208,8 @@ spec:
         memory: "128Mi"
         cpu: "100m"
       max:
-        memory: "1Gi"
-        cpu: "1"
+        memory: "1536Mi"
+        cpu: "1500m"
 ---
 # ── monitoring (Prometheus, Grafana, OpenLineage) ──────────────────────────────
 apiVersion: v1

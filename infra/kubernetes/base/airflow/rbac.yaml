@@ -1,0 +1,111 @@
+---
+# RBAC for the KubernetesPodOperator (ADR-0009).
+# The `airflow` ServiceAccount may create and follow task pods in the three
+# namespaces where DAG work actually runs — nothing cluster-wide.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: airflow
+  namespace: orchestration
+  labels:
+    app: airflow
+    app.kubernetes.io/part-of: real-time-lakehouse
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-pod-runner
+  namespace: spark
+  labels:
+    app: airflow
+    app.kubernetes.io/part-of: real-time-lakehouse
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, watch, delete, patch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-pod-runner
+  namespace: spark
+  labels:
+    app: airflow
+    app.kubernetes.io/part-of: real-time-lakehouse
+subjects:
+  - kind: ServiceAccount
+    name: airflow
+    namespace: orchestration
+roleRef:
+  kind: Role
+  name: airflow-pod-runner
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-pod-runner
+  namespace: data-quality
+  labels:
+    app: airflow
+    app.kubernetes.io/part-of: real-time-lakehouse
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, watch, delete, patch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-pod-runner
+  namespace: data-quality
+  labels:
+    app: airflow
+    app.kubernetes.io/part-of: real-time-lakehouse
+subjects:
+  - kind: ServiceAccount
+    name: airflow
+    namespace: orchestration
+roleRef:
+  kind: Role
+  name: airflow-pod-runner
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-pod-runner
+  namespace: lineage
+  labels:
+    app: airflow
+    app.kubernetes.io/part-of: real-time-lakehouse
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, watch, delete, patch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-pod-runner
+  namespace: lineage
+  labels:
+    app: airflow
+    app.kubernetes.io/part-of: real-time-lakehouse
+subjects:
+  - kind: ServiceAccount
+    name: airflow
+    namespace: orchestration
+roleRef:
+  kind: Role
+  name: airflow-pod-runner
+  apiGroup: rbac.authorization.k8s.io
