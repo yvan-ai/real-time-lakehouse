@@ -270,8 +270,10 @@ metadata:
   namespace: argocd
 spec:
   hard:
-    requests.memory: "256Mi"
-    limits.memory: "512Mi"
+    # Sized for ArgoCD *core*: application-controller + repo-server + redis
+    # (no API server / UI / Dex — see scripts/install-argocd.sh).
+    requests.memory: "512Mi"
+    limits.memory: "1Gi"
     requests.cpu: "250m"
     limits.cpu: "1"
     pods: "15"
@@ -284,11 +286,14 @@ metadata:
 spec:
   limits:
     - type: Container
+      # The upstream core-install manifests declare no resources; these
+      # defaults keep the controller/repo-server inside the quota without
+      # patching upstream YAML.
       default:
-        memory: "128Mi"
-        cpu: "100m"
+        memory: "256Mi"
+        cpu: "200m"
       defaultRequest:
-        memory: "64Mi"
+        memory: "96Mi"
         cpu: "50m"
       max:
         memory: "512Mi"
