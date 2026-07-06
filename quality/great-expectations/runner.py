@@ -49,7 +49,9 @@ def summarise(result: CheckpointResult, layer: str) -> tuple[bool, int, int]:
     total_passed = 0
     failures: list[str] = []
 
-    for run_key, validation_result in result.run_results.items():
+    for run_key, run_result in result.run_results.items():
+        # GX 0.18 checkpoints return {"validation_result": ..., "actions_results": ...}
+        validation_result = run_result["validation_result"]
         stats = validation_result.statistics
         evaluated = stats.get("evaluated_expectations", 0)
         passed = stats.get("successful_expectations", 0)

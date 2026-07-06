@@ -42,6 +42,9 @@ spec:
                   --conf "spark.extraListeners=io.openlineage.spark.agent.OpenLineageSparkListener"
                   --conf "spark.openlineage.transport.type=http"
                   --conf "spark.openlineage.transport.url=${OPENLINEAGE_URL}"
+                  # The Marquez API answers slowly from cold on its 500m-CPU
+                  # pod — the default 5s read timeout drops the first events.
+                  --conf "spark.openlineage.transport.timeoutInMillis=30000"
                   --conf "spark.openlineage.namespace=lakehouse"
                 )
               fi

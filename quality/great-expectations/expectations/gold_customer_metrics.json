@@ -4,34 +4,56 @@
   "ge_cloud_id": null,
   "meta": {
     "great_expectations_version": "0.18.0",
-    "notes": "Gold — gold.customer_metrics. Customer LTV and behavioural KPIs. Validate PK uniqueness, date ordering, non-negative counts, churn flag logic, and revenue consistency."
+    "notes": {
+      "format": "markdown",
+      "content": [
+        "Gold — gold.customer_metrics. Customer LTV and behavioural KPIs. Validate PK uniqueness, date ordering, non-negative counts, churn flag logic, and revenue consistency."
+      ]
+    }
   },
   "expectations": [
     {
       "expectation_type": "expect_table_row_count_to_be_between",
-      "kwargs": {"min_value": 1, "max_value": null},
+      "kwargs": {
+        "min_value": 1,
+        "max_value": null
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_table_columns_to_match_ordered_list",
       "kwargs": {
         "column_list": [
-          "customer_id", "country_code", "segment", "first_order_date",
-          "last_order_date", "total_orders", "total_revenue", "avg_order_value",
-          "days_since_last_order", "is_churned", "computed_at"
+          "customer_id",
+          "country_code",
+          "segment",
+          "first_order_date",
+          "last_order_date",
+          "total_orders",
+          "total_revenue",
+          "avg_order_value",
+          "days_since_last_order",
+          "is_churned",
+          "computed_at"
         ]
       },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "customer_id"},
+      "kwargs": {
+        "column": "customer_id"
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_values_to_be_unique",
-      "kwargs": {"column": "customer_id"},
-      "meta": {"notes": "One row per customer — gold is a full refresh per bucket."}
+      "kwargs": {
+        "column": "customer_id"
+      },
+      "meta": {
+        "notes": "One row per customer — gold is a full refresh per bucket."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_match_regex",
@@ -40,16 +62,24 @@
         "regex": "^[A-Z]{2}$",
         "mostly": 0.999
       },
-      "meta": {"notes": "Currently always null (dropped from the CDC source); nulls are skipped by this check."}
+      "meta": {
+        "notes": "Currently always null (dropped from the CDC source); nulls are skipped by this check."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "segment",
-        "value_set": ["consumer", "business", "vip"],
+        "value_set": [
+          "consumer",
+          "business",
+          "vip"
+        ],
         "mostly": 0.999
       },
-      "meta": {"notes": "Currently always null (dropped from the CDC source); nulls are skipped by this check."}
+      "meta": {
+        "notes": "Currently always null (dropped from the CDC source); nulls are skipped by this check."
+      }
     },
     {
       "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
@@ -59,31 +89,51 @@
         "or_equal": true,
         "mostly": 0.999
       },
-      "meta": {"notes": "last_order_date cannot precede first_order_date."}
+      "meta": {
+        "notes": "last_order_date cannot precede first_order_date."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "total_orders"},
+      "kwargs": {
+        "column": "total_orders"
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_values_to_be_between",
-      "kwargs": {"column": "total_orders", "min_value": 0, "max_value": null},
-      "meta": {"notes": "Left join from silver.customers — customers without a revenue order have total_orders = 0."}
+      "kwargs": {
+        "column": "total_orders",
+        "min_value": 0,
+        "max_value": null
+      },
+      "meta": {
+        "notes": "Left join from silver.customers — customers without a revenue order have total_orders = 0."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "total_revenue"},
+      "kwargs": {
+        "column": "total_revenue"
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_values_to_be_between",
-      "kwargs": {"column": "total_revenue", "min_value": 0.0, "max_value": null},
+      "kwargs": {
+        "column": "total_revenue",
+        "min_value": 0.0,
+        "max_value": null
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_values_to_be_between",
-      "kwargs": {"column": "avg_order_value", "min_value": 0.0, "max_value": null},
+      "kwargs": {
+        "column": "avg_order_value",
+        "min_value": 0.0,
+        "max_value": null
+      },
       "meta": {}
     },
     {
@@ -93,19 +143,28 @@
         "min_value": 0,
         "max_value": 36500
       },
-      "meta": {"notes": "Non-negative; cap at 100 years to catch computation errors."}
+      "meta": {
+        "notes": "Non-negative; cap at 100 years to catch computation errors."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "is_churned",
-        "value_set": [true, false]
+        "value_set": [
+          true,
+          false
+        ]
       },
-      "meta": {"notes": "Boolean guard. Cross-column churn logic (days_since_last_order > 90 => is_churned) is verified in runner.py custom check."}
+      "meta": {
+        "notes": "Boolean guard. Cross-column churn logic (days_since_last_order > 90 => is_churned) is verified in runner.py custom check."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "computed_at"},
+      "kwargs": {
+        "column": "computed_at"
+      },
       "meta": {}
     }
   ]

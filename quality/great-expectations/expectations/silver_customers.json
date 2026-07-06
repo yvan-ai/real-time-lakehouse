@@ -4,33 +4,54 @@
   "ge_cloud_id": null,
   "meta": {
     "great_expectations_version": "0.18.0",
-    "notes": "Silver — silver.customers. Deduplicated customer records. Validate PK uniqueness, email format, and CDC metadata. Columns aligned with data/models/iceberg/silver/customers.sql (July 2026 CDC realignment: first_name/last_name/country_code/segment dropped, name added)."
+    "notes": {
+      "format": "markdown",
+      "content": [
+        "Silver — silver.customers. Deduplicated customer records. Validate PK uniqueness, email format, and CDC metadata. Columns aligned with data/models/iceberg/silver/customers.sql (July 2026 CDC realignment: first_name/last_name/country_code/segment dropped, name added)."
+      ]
+    }
   },
   "expectations": [
     {
       "expectation_type": "expect_table_row_count_to_be_between",
-      "kwargs": {"min_value": 1, "max_value": null},
+      "kwargs": {
+        "min_value": 1,
+        "max_value": null
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_table_columns_to_match_ordered_list",
       "kwargs": {
         "column_list": [
-          "customer_id", "name", "email",
-          "created_at", "updated_at", "_source_op", "_ingested_at"
+          "customer_id",
+          "name",
+          "email",
+          "created_at",
+          "updated_at",
+          "_source_op",
+          "_ingested_at"
         ]
       },
-      "meta": {"notes": "Schema guard — must match the Silver DDL exactly."}
+      "meta": {
+        "notes": "Schema guard — must match the Silver DDL exactly."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "customer_id"},
+      "kwargs": {
+        "column": "customer_id"
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_values_to_be_unique",
-      "kwargs": {"column": "customer_id"},
-      "meta": {"notes": "Silver is the deduplicated view — one row per business key."}
+      "kwargs": {
+        "column": "customer_id"
+      },
+      "meta": {
+        "notes": "Silver is the deduplicated view — one row per business key."
+      }
     },
     {
       "expectation_type": "expect_column_value_lengths_to_be_between",
@@ -40,7 +61,9 @@
         "max_value": 200,
         "mostly": 0.99
       },
-      "meta": {"notes": "Display name must not be empty."}
+      "meta": {
+        "notes": "Display name must not be empty."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_match_regex",
@@ -49,16 +72,26 @@
         "regex": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
         "mostly": 0.99
       },
-      "meta": {"notes": "Basic email format. 1% tolerance for legacy/test accounts."}
+      "meta": {
+        "notes": "Basic email format. 1% tolerance for legacy/test accounts."
+      }
     },
     {
       "expectation_type": "expect_column_value_lengths_to_be_between",
-      "kwargs": {"column": "email", "min_value": 5, "max_value": 320},
-      "meta": {"notes": "RFC 5321 max email length is 320 chars."}
+      "kwargs": {
+        "column": "email",
+        "min_value": 5,
+        "max_value": 320
+      },
+      "meta": {
+        "notes": "RFC 5321 max email length is 320 chars."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "created_at"},
+      "kwargs": {
+        "column": "created_at"
+      },
       "meta": {}
     },
     {
@@ -69,19 +102,29 @@
         "or_equal": true,
         "mostly": 0.999
       },
-      "meta": {"notes": "updated_at must be >= created_at."}
+      "meta": {
+        "notes": "updated_at must be >= created_at."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "_source_op",
-        "value_set": ["c", "u", "r"]
+        "value_set": [
+          "c",
+          "u",
+          "r"
+        ]
       },
-      "meta": {"notes": "Batch keeps UPSERT_OPS (c/u/r); deletes never reach Silver. r = Debezium snapshot read."}
+      "meta": {
+        "notes": "Batch keeps UPSERT_OPS (c/u/r); deletes never reach Silver. r = Debezium snapshot read."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "_ingested_at"},
+      "kwargs": {
+        "column": "_ingested_at"
+      },
       "meta": {}
     }
   ]

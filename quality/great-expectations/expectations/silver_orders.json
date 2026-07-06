@@ -4,57 +4,99 @@
   "ge_cloud_id": null,
   "meta": {
     "great_expectations_version": "0.18.0",
-    "notes": "Silver — silver.orders. Deduplicated, typed orders from CDC. Enforce business keys, valid status values, non-negative amounts, and referential integrity markers."
+    "notes": {
+      "format": "markdown",
+      "content": [
+        "Silver — silver.orders. Deduplicated, typed orders from CDC. Enforce business keys, valid status values, non-negative amounts, and referential integrity markers."
+      ]
+    }
   },
   "expectations": [
     {
       "expectation_type": "expect_table_row_count_to_be_between",
-      "kwargs": {"min_value": 1, "max_value": null},
+      "kwargs": {
+        "min_value": 1,
+        "max_value": null
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_table_columns_to_match_ordered_list",
       "kwargs": {
         "column_list": [
-          "order_id", "customer_id", "status", "total_amount", "currency",
-          "created_at", "updated_at", "_source_op", "_ingested_at"
+          "order_id",
+          "customer_id",
+          "status",
+          "total_amount",
+          "currency",
+          "created_at",
+          "updated_at",
+          "_source_op",
+          "_ingested_at"
         ]
       },
-      "meta": {"notes": "Schema guard — must match the Silver DDL exactly."}
+      "meta": {
+        "notes": "Schema guard — must match the Silver DDL exactly."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "order_id"},
+      "kwargs": {
+        "column": "order_id"
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_values_to_be_unique",
-      "kwargs": {"column": "order_id"},
-      "meta": {"notes": "Silver is the deduplicated view — one row per business key."}
+      "kwargs": {
+        "column": "order_id"
+      },
+      "meta": {
+        "notes": "Silver is the deduplicated view — one row per business key."
+      }
     },
     {
       "expectation_type": "expect_column_value_lengths_to_be_between",
-      "kwargs": {"column": "order_id", "min_value": 1, "max_value": 128},
+      "kwargs": {
+        "column": "order_id",
+        "min_value": 1,
+        "max_value": 128
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "customer_id"},
+      "kwargs": {
+        "column": "customer_id"
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_value_lengths_to_be_between",
-      "kwargs": {"column": "customer_id", "min_value": 1, "max_value": 128},
+      "kwargs": {
+        "column": "customer_id",
+        "min_value": 1,
+        "max_value": 128
+      },
       "meta": {}
     },
     {
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "status",
-        "value_set": ["pending", "confirmed", "shipped", "delivered", "completed", "cancelled"],
+        "value_set": [
+          "pending",
+          "confirmed",
+          "shipped",
+          "delivered",
+          "completed",
+          "cancelled"
+        ],
         "mostly": 0.999
       },
-      "meta": {"notes": "Full lifecycle emitted by the traffic generator (STATUS_FLOW). 0.1% tolerance for future status values arriving before schema update."}
+      "meta": {
+        "notes": "Full lifecycle emitted by the traffic generator (STATUS_FLOW). 0.1% tolerance for future status values arriving before schema update."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_be_between",
@@ -64,7 +106,9 @@
         "max_value": null,
         "mostly": 0.999
       },
-      "meta": {"notes": "Negative totals would indicate a refund applied at source — flag for review."}
+      "meta": {
+        "notes": "Negative totals would indicate a refund applied at source — flag for review."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_match_regex",
@@ -73,11 +117,15 @@
         "regex": "^[A-Z]{3}$",
         "mostly": 0.999
       },
-      "meta": {"notes": "ISO 4217 three-letter code. Currently always null (source has no currency column); nulls are skipped by this check."}
+      "meta": {
+        "notes": "ISO 4217 three-letter code. Currently always null (source has no currency column); nulls are skipped by this check."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "created_at"},
+      "kwargs": {
+        "column": "created_at"
+      },
       "meta": {}
     },
     {
@@ -87,7 +135,9 @@
         "min_value": "2024-01-01T00:00:00",
         "max_value": null
       },
-      "meta": {"notes": "Freshness: latest order must be after project go-live."}
+      "meta": {
+        "notes": "Freshness: latest order must be after project go-live."
+      }
     },
     {
       "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
@@ -97,19 +147,29 @@
         "or_equal": true,
         "mostly": 0.999
       },
-      "meta": {"notes": "updated_at must be >= created_at."}
+      "meta": {
+        "notes": "updated_at must be >= created_at."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "_source_op",
-        "value_set": ["c", "u", "r"]
+        "value_set": [
+          "c",
+          "u",
+          "r"
+        ]
       },
-      "meta": {"notes": "Batch keeps UPSERT_OPS (c/u/r); deletes never reach Silver. r = Debezium snapshot read."}
+      "meta": {
+        "notes": "Batch keeps UPSERT_OPS (c/u/r); deletes never reach Silver. r = Debezium snapshot read."
+      }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "_ingested_at"},
+      "kwargs": {
+        "column": "_ingested_at"
+      },
       "meta": {}
     }
   ]
