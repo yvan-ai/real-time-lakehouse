@@ -110,6 +110,40 @@ jobs:
             --cov \
             --cov-report=term-missing
 
+  # ── 3b. Terraform fmt + validate + tflint (no cloud credentials) ──────────
+  lint-terraform:
+    name: Terraform Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive infra/terraform
+
+      - name: terraform validate — local root
+        run: |
+          terraform -chdir=infra/terraform/local init -backend=false -input=false
+          terraform -chdir=infra/terraform/local validate
+
+      - name: terraform validate — aws root (plan-only skeleton)
+        run: |
+          terraform -chdir=infra/terraform/aws init -backend=false -input=false
+          terraform -chdir=infra/terraform/aws validate
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.54.0
+
+      - name: tflint
+        run: |
+          tflint --init --config "$(pwd)/infra/terraform/.tflint.hcl"
+          tflint --config "$(pwd)/infra/terraform/.tflint.hcl" --chdir infra/terraform/local
+          tflint --config "$(pwd)/infra/terraform/.tflint.hcl" --chdir infra/terraform/aws
+
   # ── 4. Validate Kubernetes manifests ─────────────────────────────────────
   validate-manifests:
     name: Validate K8s Manifests
