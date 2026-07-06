@@ -21,38 +21,6 @@ resources:
   - ../../../../pipelines/orchestration
   - ../../../../pipelines/dbt
 
-secretGenerator:
-  - name: minio-credentials
-    namespace: lakehouse
-    envs:
-      - minio.env
-    options:
-      disableNameSuffixHash: true
-  # Marquez DB credentials — rendered in both namespaces: the marquez pod
-  # (lineage) and the db-init Job next to Postgres (streaming).
-  - name: marquez-db-credentials
-    namespace: lineage
-    envs:
-      - marquez.env
-    options:
-      disableNameSuffixHash: true
-  - name: marquez-db-credentials
-    namespace: streaming
-    envs:
-      - marquez.env
-    options:
-      disableNameSuffixHash: true
-  # Airflow credentials — rendered in both namespaces: the airflow pod
-  # (orchestration) and the db-init Job next to Postgres (streaming).
-  - name: airflow-credentials
-    namespace: orchestration
-    envs:
-      - airflow.env
-    options:
-      disableNameSuffixHash: true
-  - name: airflow-credentials
-    namespace: streaming
-    envs:
-      - airflow.env
-    options:
-      disableNameSuffixHash: true
+# Secrets are NOT part of this overlay: their env files are gitignored, so
+# ArgoCD could not build the overlay from git. They live in ./secrets/
+# (applied by bootstrap.sh / deploy.sh only) — see secrets/kustomization.yaml.

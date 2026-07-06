@@ -120,21 +120,21 @@ jobs:
       - name: Setup Kustomize
         uses: imranismail/setup-kustomize@v2
 
-      - name: Provide placeholder env files for secretGenerator
-        # minio.env / marquez.env are gitignored (real credentials); the
-        # example files are enough to render manifests for validation.
+      - name: Provide placeholder env files for the secrets kustomization
+        # The env files are gitignored (real credentials); the example files
+        # are enough to render manifests for validation.
         run: |
-          cp infra/kubernetes/overlays/local/minio.env.example \
-             infra/kubernetes/overlays/local/minio.env
-          cp infra/kubernetes/overlays/local/marquez.env.example \
-             infra/kubernetes/overlays/local/marquez.env
-          cp infra/kubernetes/overlays/local/airflow.env.example \
-             infra/kubernetes/overlays/local/airflow.env
+          for f in minio marquez airflow; do
+            cp "infra/kubernetes/overlays/local/secrets/${f}.env.example" \
+               "infra/kubernetes/overlays/local/secrets/${f}.env"
+          done
 
-      - name: kustomize build — local overlay
+      - name: kustomize build — local overlay + secrets
         # Render inside the workspace: the kubeconform container only mounts
         # /github/workspace, so /tmp on the runner is not visible to it.
-        run: kustomize build infra/kubernetes/overlays/local > rendered-manifests.yaml
+        run: |
+          kustomize build infra/kubernetes/overlays/local > rendered-manifests.yaml
+          kustomize build infra/kubernetes/overlays/local/secrets >> rendered-manifests.yaml
 
       - name: kubeconform
         uses: docker://ghcr.io/yannh/kubeconform:latest
