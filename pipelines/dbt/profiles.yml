@@ -1,0 +1,26 @@
+# Committed on purpose: Trino runs without authentication on this platform
+# (admin user, no password) so there is nothing secret here. If auth is ever
+# enabled, move this file to an .env-driven secret like the others.
+lakehouse:
+  target: local
+  outputs:
+    # Local dev — requires: kubectl port-forward svc/trino 8080:8080 -n lakehouse
+    local:
+      type: trino
+      method: none
+      user: admin
+      host: localhost
+      port: 8080
+      catalog: iceberg
+      schema: gold
+      threads: 2
+    # In-cluster — used by the dbt_build_gold DAG task.
+    k8s:
+      type: trino
+      method: none
+      user: admin
+      host: trino.lakehouse.svc.cluster.local
+      port: 8080
+      catalog: iceberg
+      schema: gold
+      threads: 2

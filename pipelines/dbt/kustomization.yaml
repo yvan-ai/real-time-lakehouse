@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# dbt project shipped to the dbt_build_gold DAG task as ConfigMaps (flat
+# key/value — the pod reassembles the directory layout, same pattern as the
+# quality-gate GX project).
+namespace: data-quality
+
+configMapGenerator:
+  - name: dbt-project
+    files:
+      - dbt_project.yml
+      - profiles.yml
+    options:
+      disableNameSuffixHash: true
+  - name: dbt-models
+    files:
+      - models/gold/daily_revenue.sql
+      - models/gold/customer_metrics.sql
+      - models/gold/schema.yml
+      - models/gold/sources.yml
+    options:
+      disableNameSuffixHash: true
+  - name: dbt-tests
+    files:
+      - tests/assert_daily_revenue_unique_grain.sql
+    options:
+      disableNameSuffixHash: true

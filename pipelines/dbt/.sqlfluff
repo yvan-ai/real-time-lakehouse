@@ -1,0 +1,12 @@
+[sqlfluff]
+dialect = trino
+templater = jinja
+max_line_length = 110
+# L034 (column order) and structure rules fight hand-tuned aggregate CTEs.
+exclude_rules = structure.column_order
+
+[sqlfluff:indentation]
+tab_space_size = 4
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = true
