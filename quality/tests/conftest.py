@@ -15,6 +15,7 @@ SPARK_JOBS_DIR = REPO_ROOT / "pipelines" / "batch" / "spark-jobs"
 
 sys.path.insert(0, str(SPARK_JOBS_DIR))
 sys.path.insert(0, str(REPO_ROOT / "demo"))
+sys.path.insert(0, str(REPO_ROOT / "pipelines" / "ingestion"))
 
 
 @pytest.fixture(scope="session")

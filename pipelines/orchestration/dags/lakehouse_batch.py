@@ -131,9 +131,7 @@ def _configmap_volume(name: str) -> k8s.V1Volume:
 def _secret_env(name: str, secret: str, key: str) -> k8s.V1EnvVar:
     return k8s.V1EnvVar(
         name=name,
-        value_from=k8s.V1EnvVarSource(
-            secret_key_ref=k8s.V1SecretKeySelector(name=secret, key=key)
-        ),
+        value_from=k8s.V1EnvVarSource(secret_key_ref=k8s.V1SecretKeySelector(name=secret, key=key)),
     )
 
 

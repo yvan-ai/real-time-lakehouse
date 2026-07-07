@@ -3,3 +3,5 @@
 pyspark==3.5.3
 pytest>=8.0,<9
 pytest-cov>=5.0
+# Exchange-rates loader transform tests (pipelines/ingestion, ADR-0011)
+polars>=1.0,<2
