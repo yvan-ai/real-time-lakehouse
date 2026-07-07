@@ -68,7 +68,7 @@ daily as (
         ) as avg_order_value
     from orders as o
     left join order_items as oi on o.order_id = oi.order_id
-    group by 1, 2
+    group by date(o.created_at), coalesce(o.currency, 'USD')
 
 )
 
@@ -81,6 +81,6 @@ select
     d.net_revenue,
     d.avg_order_value,
     cast(coalesce(f.new_customers, 0) as bigint) as new_customers,
-    cast(current_timestamp as timestamp(6)) as computed_at
+    cast(current_timestamp as timestamp(6)) as computed_at -- noqa: LT01
 from daily as d
 left join first_orders as f on d.report_date = f.report_date

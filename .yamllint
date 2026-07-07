@@ -19,3 +19,5 @@ rules:
 ignore: |
   infra/kubernetes/base/monitoring/grafana.yaml
   .claude/
+  # Terraform provider/module caches (created by `terraform init`)
+  **/.terraform/

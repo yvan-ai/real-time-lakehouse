@@ -4,13 +4,19 @@ Only the pure Polars function is covered — fetch (network) and produce
 (Kafka) are exercised end-to-end on the cluster, not here.
 """
 
+# Keeps the module importable on Python 3.8 (pytest fallback inside the
+# Spark image), where dict[str, Any] is not subscriptable at runtime.
+from __future__ import annotations
+
+from typing import Any
+
 import pytest
 
 polars = pytest.importorskip("polars", reason="polars not installed (pipelines/ingestion)")
 
 from exchange_rates_loader import rates_to_events  # noqa: E402
 
-PAYLOAD = {
+PAYLOAD: dict[str, Any] = {
     "amount": 1.0,
     "base": "EUR",
     "date": "2026-07-07",

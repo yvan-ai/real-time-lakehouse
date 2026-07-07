@@ -56,6 +56,6 @@ select
     coalesce(s.avg_order_value, cast(0 as decimal(18, 2))) as avg_order_value,
     cast(date_diff('day', s.last_order_date, current_date) as integer) as days_since_last_order,
     coalesce(date_diff('day', s.last_order_date, current_date) > 90, false) as is_churned,
-    cast(current_timestamp as timestamp(6)) as computed_at
+    cast(current_timestamp as timestamp(6)) as computed_at -- noqa: LT01
 from customers as c
 left join order_stats as s on c.customer_id = s.customer_id
