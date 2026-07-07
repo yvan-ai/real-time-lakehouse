@@ -225,6 +225,71 @@ logic can be replayed from raw history. Silver applies **last-write-wins dedupli
 business key. Gold serves dashboards with pre-aggregated KPIs (daily revenue, customer
 lifetime value, churn flags).
 
+## Ingestion — two lanes
+
+- **CDC (log-based)** — Debezium turns every Postgres commit into an event on the
+  `debezium.public.*` topics; nothing polls the database
+  ([ADR-0004](docs/decisions/0004-debezium-cdc-over-polling.md)).
+- **EL (API pull)** — a **Polars** loader
+  ([pipelines/ingestion/exchange_rates_loader.py](pipelines/ingestion/exchange_rates_loader.py))
+  pulls ECB exchange rates from the Frankfurter API, reshapes them into one event per
+  currency and produces to the `raw.events` topic. The Bronze job captures the full Kafka
+  record (topic, partition, offset, timestamp, key, payload) into `raw.kafka_events`, whose
+  GX suite gates the run. Airbyte is documented as the industrial alternative — it does not
+  fit the 16 GB budget ([ADR-0011](docs/decisions/0011-lightweight-el-over-airbyte.md)).
+
+```bash
+python3 pipelines/ingestion/exchange_rates_loader.py --dry-run   # inspect the events
+python3 pipelines/ingestion/exchange_rates_loader.py             # produce to raw.events
+```
+
+## Orchestration (Airflow)
+
+A daily `lakehouse_batch` DAG
+([pipelines/orchestration/dags/lakehouse_batch.py](pipelines/orchestration/dags/lakehouse_batch.py))
+drives the cold path end to end ([ADR-0009](docs/decisions/0009-airflow-orchestration.md)):
+
+```
+batch_bronze_silver (Spark) → dbt_build_gold (Trino) → quality_gate (blocking) → register_lineage
+```
+
+- **Standalone-style deployment** — scheduler + webserver in one pod (LocalExecutor),
+  metadata in a dedicated `airflow` database inside the shared Postgres; the pod stays
+  under 1.25 Gi.
+- **Work runs elsewhere** — every task is a `KubernetesPodOperator` pod spawned in the
+  namespace that owns the work (`spark`, `data-quality`, `lineage`) under its own quota,
+  with namespace-scoped RBAC only.
+- **The gate blocks** — one failed expectation fails the gate pod, the task and the DAG
+  run; failed pods are kept so kube-state-metrics can alert on them.
+- **DAGs deploy like everything else** — shipped as a kustomize-generated ConfigMap;
+  `scripts/run-batch.sh` remains the no-Airflow fallback.
+
+```bash
+kubectl port-forward svc/airflow 8081:8080 -n orchestration      # UI → http://localhost:8081
+kubectl exec -n orchestration deploy/airflow -- airflow dags trigger lakehouse_batch
+```
+
+## SQL-first Gold layer (dbt)
+
+The Gold tables are built by **dbt Core on Trino** ([pipelines/dbt/](pipelines/dbt/)):
+`gold.daily_revenue` and `gold.customer_metrics` are table models reading
+`iceberg.silver.*`, replacing the Spark Gold job on the orchestrated path (Spark keeps the
+Bronze/Silver CDC parsing, and stays as the Gold fallback in `run-batch.sh` during the
+cutover).
+
+- **Tested** — `unique` / `not_null` / `relationships` schema tests plus a singular
+  grain test, complementing (not replacing) the GX gate.
+- **Lineage-emitting** — the DAG task runs `dbt-ol build`, adding the silver → dbt → gold
+  edges to the Marquez graph.
+- **Documented** — `dbt docs generate` publishes the model docs on
+  [Pages under `/dbt/`](https://yvan-ai.github.io/real-time-lakehouse/dbt/), next to the
+  GX Data Docs; CI runs `dbt parse` + `sqlfluff` on every commit, no cluster needed.
+
+```bash
+kubectl port-forward svc/trino 8080:8080 -n lakehouse &
+cd pipelines/dbt && pip install dbt-trino && dbt build --profiles-dir . --target local
+```
+
 ## Technical decisions
 
 Key choices are documented as ADRs in [docs/decisions/](docs/decisions/):
@@ -250,9 +315,13 @@ Key choices are documented as ADRs in [docs/decisions/](docs/decisions/):
   any failed expectation turns the Job red, pushes `gx_*` metrics to Prometheus and fires
   the `QualityGateFailed` alert ([ADR-0007](docs/decisions/0007-quality-gate-as-deployment-blocker.md)).
   Browsable suites: [Data Docs](https://yvan-ai.github.io/real-time-lakehouse/), published by CI.
+- **dbt tests** (`pipelines/dbt/`) — schema tests (`unique`, `not_null`, `relationships`)
+  and a singular grain test run inside `dbt build`, failing the DAG before the GX gate even
+  starts.
 - **Manifest validation** — every PR renders the full Kustomize overlay and validates it
   with kubeconform.
-- **Static analysis** — ruff (lint + format), mypy, yamllint, pre-commit hooks.
+- **Static analysis** — ruff (lint + format), mypy, yamllint, sqlfluff (dbt SQL),
+  `terraform fmt`/`validate`/tflint, pre-commit hooks.
 
 ## Data lineage
 
@@ -290,6 +359,30 @@ docker compose -f docker-compose.dev.yml --profile bi up -d superset
 Dashboards on `gold.daily_revenue` and `gold.customer_metrics` are versioned as native
 exports in [observability/superset/](observability/superset/) (import/export round-trip
 documented there).
+
+## GitOps & infrastructure as code
+
+**ArgoCD core** (controller + repo-server only — no UI/API pods, RAM budget) reconciles
+`infra/kubernetes/overlays/local` from `main` automatically: merging a change rolls the
+pods with no human `kubectl apply`. The CD workflow just bumps image tags; auto-sync picks
+them up. Two design points make this safe
+([ADR-0006](docs/decisions/0006-gitops-deployment-with-argocd.md)):
+
+- **Secrets live outside the tracked overlay** (`overlays/local/secrets/`, gitignored env
+  files applied only by `bootstrap.sh`/`deploy.sh`) — so the repo-server can always build
+  the overlay from a clean checkout.
+- **Prune stays off** — immutable Jobs (`batch-pipeline`, `quality-gate`, `*-db-init`) and
+  script-refreshed ConfigMaps are not in git and must survive syncs.
+
+**Terraform** owns the cluster add-ons ([ADR-0010](docs/decisions/0010-iac-boundaries.md)
+draws the boundaries between Terraform, kustomize, ArgoCD and the scripts):
+
+- [infra/terraform/local](infra/terraform/local) — Strimzi + Flink Kubernetes operator as
+  `helm_release` resources (bootstrap falls back to the install scripts when the CLI is
+  absent).
+- [infra/terraform/aws](infra/terraform/aws) — plan-only EKS + MSK + S3 skeleton mirroring
+  the local stack (k3s→EKS, Kafka→MSK, MinIO→S3); validated in CI, never applied, no
+  credentials in the repo.
 
 ## Results & metrics
 
