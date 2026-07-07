@@ -8,12 +8,16 @@
 [![Flink 1.20](https://img.shields.io/badge/Apache%20Flink-1.20-d22128.svg)](https://flink.apache.org/)
 [![Iceberg 1.5](https://img.shields.io/badge/Apache%20Iceberg-1.5-1c5b8e.svg)](https://iceberg.apache.org/)
 
-A production-grade **streaming + batch lakehouse** that fits on a single 16 GB laptop.
-Database changes are captured with **Debezium CDC**, streamed through **Kafka**, aggregated
-in real time by **Flink** (exactly-once, 1-minute event-time windows), and landed by **Spark**
-into **Apache Iceberg** tables on **MinIO** — with **dbt on Trino** building the Gold layer,
-**Airflow** orchestrating the whole run (blocking quality gate included), and the cluster
-reconciled from git by **ArgoCD**, provisioned by **Terraform**.
+A production-grade **streaming + batch lakehouse** that fits on a single 16 GB laptop:
+**~60 s from a Postgres commit to a live dashboard** on the hot path, **9 Iceberg tables**
+across a medallion architecture, and **9 expectation suites + 10 dbt tests** gating every
+run — under simulated e-commerce load.
+
+Postgres changes are captured by **Debezium CDC** and streamed through **Kafka**; **Flink**
+aggregates them in real time (exactly-once, 1-minute event-time windows) while **Spark** and
+**dbt on Trino** build the Bronze→Silver→Gold **Iceberg** layers on **MinIO**. A daily
+**Airflow** DAG chains batch → dbt → a **blocking quality gate** → lineage, and the 80+
+Kubernetes resources are reconciled from git by **ArgoCD** and provisioned by **Terraform**.
 
 ## Architecture
 
@@ -21,12 +25,19 @@ reconciled from git by **ArgoCD**, provisioned by **Terraform**.
 flowchart LR
     subgraph Sources
         PG[(PostgreSQL<br/>orders, customers)]
+        FX[Exchange-rates API]
     end
 
-    subgraph Streaming["Streaming (namespace: streaming)"]
+    subgraph Ingestion["Ingestion (namespace: streaming)"]
         DBZ[Debezium<br/>Kafka Connect]
+        PL[Polars EL loader]
         K[(Kafka 4.2<br/>Strimzi / KRaft)]
         FL[Flink 1.20<br/>1-min tumbling windows<br/>exactly-once]
+    end
+
+    subgraph Transform["Transformation"]
+        SP[Spark 3.5<br/>Bronze → Silver]
+        DBT[dbt Core<br/>Gold models on Trino]
     end
 
     subgraph Lakehouse["Lakehouse (namespace: lakehouse)"]
@@ -36,23 +47,30 @@ flowchart LR
         TR[Trino 435<br/>SQL engine]
     end
 
-    subgraph Batch["Batch (namespace: spark)"]
-        SP[Spark 3.5<br/>Bronze → Silver → Gold]
+    subgraph Orchestration["Orchestration (namespace: orchestration)"]
+        AF[Airflow DAG<br/>batch → dbt → gate → lineage]
+        GX[GX quality gate<br/>blocking]
     end
 
-    subgraph Consumers
-        BI[Dashboards / BI]
+    subgraph Serving
+        BI[Superset / Streamlit]
         RT[Real-time consumers]
     end
 
     PG -- WAL --> DBZ --> K
+    FX --> PL --> K
     K -- CDC topics --> FL
     FL -- revenue aggregates --> K
     K -- bounded read --> SP
     SP -- write --> ICE
+    DBT -- SQL --> TR
     ICE --- NS
     ICE --- MINIO
     TR --> ICE
+    AF -.-> SP
+    AF -.-> DBT
+    AF -.-> GX
+    GX -. validates via .-> TR
     TR --> BI
     K --> RT
 ```
@@ -61,8 +79,9 @@ Two paths consume the same CDC stream:
 
 - **Hot path** — Flink aggregates order revenue in 1-minute event-time tumbling windows
   (watermarks, exactly-once checkpoints) and publishes to a `gold.order-revenue-1m` topic.
-- **Cold path** — Spark batch jobs land the raw CDC envelopes in Bronze, deduplicate into
-  Silver (last-write-wins on `ts_ms`), and pre-aggregate Gold KPI tables.
+- **Cold path** — Spark lands the raw CDC envelopes in Bronze and deduplicates into Silver
+  (last-write-wins on `ts_ms`); dbt builds the Gold KPI tables on Trino. A daily Airflow DAG
+  chains both with a blocking Great Expectations gate and lineage registration.
 
 ## Tech stack
 
@@ -96,6 +115,9 @@ Two paths consume the same CDC stream:
   partitioning (`days()`, `bucket()`) and file sizes.
 - **Single source of truth for schemas** — Iceberg DDL in `data/models/iceberg/`, JSON Schemas
   in `data/schemas/`, and a data contract in `data/contracts/` all describe the same entities.
+- **Orchestrated, gated, reconciled** — a daily Airflow DAG chains Spark, dbt and a
+  blocking Great Expectations gate; ArgoCD core auto-syncs the cluster from `main`;
+  Terraform owns the operators (ADR-0010 draws the IaC boundaries).
 - **Everything fits in 16 GB** — every pod defines requests/limits; the full stack is tuned
   for WSL2 (see [docs/architecture.md](docs/architecture.md#resource-budget)).
 - **No plaintext secrets** — credentials come from gitignored env files rendered into
@@ -268,6 +290,19 @@ docker compose -f docker-compose.dev.yml --profile bi up -d superset
 Dashboards on `gold.daily_revenue` and `gold.customer_metrics` are versioned as native
 exports in [observability/superset/](observability/superset/) (import/export round-trip
 documented there).
+
+## Results & metrics
+
+Measured on the demo e-commerce load (traffic generator) on a single 16 GB WSL2 laptop:
+
+| Metric | Value |
+|---|---|
+| Hot-path latency (Postgres commit → dashboard) | ~60 s (1-minute event-time windows) |
+| Iceberg tables (Bronze / Silver / Gold) | 9 (4 / 3 / 2) |
+| Data-quality checks gating each run | 9 GX suites + 10 dbt tests, blocking gate Job |
+| Kubernetes resources under GitOps | 80+ across 9 quota-guarded namespaces |
+| CI checks on every commit | 10 jobs — lint, types, unit tests, dbt, Terraform, kubeconform, images, docs |
+| Architecture Decision Records | 11 |
 
 ## Roadmap
 
