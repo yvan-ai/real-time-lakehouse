@@ -283,11 +283,13 @@ jobs:
           EOF
 
       - name: Build dbt docs (no warehouse connection)
-        # --empty-catalog renders the docs from the manifest only, so the
-        # Trino datasource is never queried in CI.
+        # --empty-catalog skips the catalog queries and --no-populate-cache
+        # skips the relation-cache metadata queries — together no connection
+        # to Trino is ever opened (there is none in CI).
         run: |
           cd pipelines/dbt
-          dbt docs generate --empty-catalog --profiles-dir . --target local
+          dbt docs generate --empty-catalog --no-populate-cache \
+            --profiles-dir . --target local
 
       - name: Assemble Pages site (GX docs at /, dbt docs at /dbt/)
         run: |
