@@ -168,6 +168,9 @@ jobs:
         # /github/workspace, so /tmp on the runner is not visible to it.
         run: |
           kustomize build infra/kubernetes/overlays/local > rendered-manifests.yaml
+          # kustomize output has no trailing separator — without it the first
+          # secrets document merges into the last overlay document.
+          echo '---' >> rendered-manifests.yaml
           kustomize build infra/kubernetes/overlays/local/secrets >> rendered-manifests.yaml
 
       - name: kubeconform
