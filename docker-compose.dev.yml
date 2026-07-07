@@ -97,6 +97,52 @@ services:
       minio:
         condition: service_healthy
 
+  # ── BI serving (roadmap pillar 9) — opt-in profile, ~1.5 Gi Docker-side ────
+  # Runs OUTSIDE the k3s RAM budget. Start with:
+  #   docker compose -f docker-compose.dev.yml --profile bi up -d superset
+  # Reach the cluster's Trino first (from WSL):
+  #   kubectl port-forward svc/trino 8080:8080 -n lakehouse --address 0.0.0.0
+  # UI: http://localhost:8088 (admin / $SUPERSET_ADMIN_PASSWORD, default admin).
+  # Dashboard exports live in observability/superset/ — see its README.
+  # Airbyte would slot into this same profile on beefier machines (ADR-0011).
+  superset:
+    image: apache/superset:4.1.1
+    profiles: ["bi"]
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-dev-only-not-a-secret}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
+    command:
+      - /bin/bash
+      - -c
+      - |
+        set -e
+        pip install --no-cache-dir --quiet trino
+        superset db upgrade
+        superset fab create-admin \
+          --username admin --password "$${SUPERSET_ADMIN_PASSWORD}" \
+          --firstname Lakehouse --lastname Admin \
+          --email admin@lakehouse.local || true
+        superset init
+        # Pre-register the Trino connection (idempotent): the port-forward
+        # above exposes the in-cluster Trino on the Docker host.
+        superset set-database-uri \
+          --database_name Trino-Iceberg \
+          --uri "trino://admin@host.docker.internal:8080/iceberg" || true
+        superset run -h 0.0.0.0 -p 8088
+    ports:
+      - "8088:8088"
+    extra_hosts:
+      # Linux engines need the host-gateway alias; Docker Desktop has it built in.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - superset-home:/app/superset_home
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8088/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
 volumes:
   postgres-data:
   minio-data:
+  superset-home:
