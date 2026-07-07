@@ -11,8 +11,9 @@
 A production-grade **streaming + batch lakehouse** that fits on a single 16 GB laptop.
 Database changes are captured with **Debezium CDC**, streamed through **Kafka**, aggregated
 in real time by **Flink** (exactly-once, 1-minute event-time windows), and landed by **Spark**
-into **Apache Iceberg** tables on **MinIO** — all queryable through **Trino** and deployed on
-Kubernetes with **GitOps (ArgoCD)**.
+into **Apache Iceberg** tables on **MinIO** — with **dbt on Trino** building the Gold layer,
+**Airflow** orchestrating the whole run (blocking quality gate included), and the cluster
+reconciled from git by **ArgoCD**, provisioned by **Terraform**.
 
 ## Architecture
 
@@ -75,11 +76,16 @@ Two paths consume the same CDC stream:
 | Catalog | Nessie 0.62 | Iceberg REST catalog (no Hive metastore) |
 | Object store | MinIO | S3-compatible warehouse storage |
 | Query engine | Trino 435 | Federated SQL over Iceberg |
+| Transformation | dbt Core (dbt-trino) | SQL-first Gold models + tests, docs on Pages |
+| Orchestration | Airflow 2.10 (standalone) | Daily DAG: batch → dbt → quality gate → lineage |
+| EL ingestion | Polars loader | Exchange-rates API → `raw.events` topic (second lane) |
 | Data quality | Great Expectations | Suites per layer + post-batch quality gate (K8s Job) |
-| Lineage | OpenLineage + Marquez | Automatic Spark lineage, declarative CDC/Flink graph |
-| Orchestration | Kubernetes (k3s) + Kustomize | Declarative deployment, WSL2-friendly |
-| GitOps / CI | ArgoCD + GitHub Actions | Lint, tests, image build, auto-sync, Data Docs on Pages |
+| Lineage | OpenLineage + Marquez | Automatic Spark lineage, dbt emitter, declarative edges |
+| Deployment | Kubernetes (k3s) + Kustomize | Declarative manifests, WSL2-friendly |
+| IaC | Terraform | Operators via Helm releases (local), EKS+MSK+S3 skeleton (cloud) |
+| GitOps / CI | ArgoCD core + GitHub Actions | Auto-sync from main; lint, tests, images, Data Docs |
 | Observability | Prometheus + Grafana | Pipeline / Kafka / Flink dashboards & runbook'd alerts |
+| BI serving | Superset (Compose profile `bi`) | Dashboards on the Gold tables through Trino |
 
 ## Key features
 
@@ -110,6 +116,9 @@ Two paths consume the same CDC stream:
 # 3. Run the batch pipeline Bronze → Silver → Gold
 #    (on success the Great Expectations quality gate runs automatically)
 ./scripts/run-batch.sh
+#    …or let Airflow drive it: batch → dbt → gate → lineage
+kubectl port-forward svc/airflow 8081:8080 -n orchestration
+# → http://localhost:8081, trigger the lakehouse_batch DAG
 
 # 4. Query with Trino
 kubectl port-forward svc/trino 8080:8080 -n lakehouse
@@ -165,12 +174,16 @@ make validate   # kustomize build + kubeconform
 │   ├── architecture.md       # Detailed design & resource budget
 │   └── decisions/            # Architecture Decision Records (ADRs)
 ├── infra/
-│   ├── kubernetes/           # Kustomize bases + local overlay
-│   └── argocd/               # GitOps project & applications
-├── observability/            # Prometheus rules, Grafana dashboards
+│   ├── kubernetes/           # Kustomize bases + local overlay (secrets split out)
+│   ├── argocd/               # GitOps project & applications (auto-sync)
+│   └── terraform/            # local: operators via Helm · aws: EKS+MSK+S3 skeleton
+├── observability/            # Prometheus rules, Grafana dashboards, Superset exports
 ├── pipelines/
 │   ├── streaming/            # Flink job, Kafka topics, Debezium/Connect
-│   └── batch/spark-jobs/     # Bronze / Silver / Gold PySpark jobs + shared lib
+│   ├── batch/                # Bronze/Silver/Gold PySpark jobs + prebaked image
+│   ├── dbt/                  # SQL-first Gold models on Trino + dbt tests
+│   ├── ingestion/            # Polars EL loader (exchange rates → raw.events)
+│   └── orchestration/dags/   # Airflow lakehouse_batch DAG
 ├── quality/
 │   ├── great-expectations/   # Expectation suites & checkpoints per layer
 │   └── tests/                # Unit tests (pytest + local SparkSession)
@@ -199,6 +212,11 @@ Key choices are documented as ADRs in [docs/decisions/](docs/decisions/):
 - [ADR-0004](docs/decisions/0004-debezium-cdc-over-polling.md) — Log-based CDC with Debezium over batch polling
 - [ADR-0005](docs/decisions/0005-iceberg-write-strategies-per-layer.md) — Per-layer Iceberg write strategies
 - [ADR-0006](docs/decisions/0006-gitops-deployment-with-argocd.md) — GitOps deployment with ArgoCD
+- [ADR-0007](docs/decisions/0007-quality-gate-as-deployment-blocker.md) — Quality gate as a deployment blocker
+- [ADR-0008](docs/decisions/0008-openlineage-marquez.md) — Data lineage with OpenLineage and Marquez
+- [ADR-0009](docs/decisions/0009-airflow-orchestration.md) — Airflow (standalone-style) for orchestration
+- [ADR-0010](docs/decisions/0010-iac-boundaries.md) — IaC boundaries: Terraform vs kustomize vs ArgoCD
+- [ADR-0011](docs/decisions/0011-lightweight-el-over-airbyte.md) — Lightweight Polars EL loader over Airbyte
 
 ## Testing & quality
 
@@ -221,15 +239,35 @@ Marquez (namespace `lineage`) stores the OpenLineage graph
 
 - **Spark — automatic**: the batch Job loads `openlineage-spark` and emits the
   Bronze→Silver→Gold graph (Kafka source included, schema facets) on every run.
-- **Debezium & Flink — declarative**: [scripts/register_lineage.py](scripts/register_lineage.py)
-  registers Postgres → `debezium.public.*` (connector) and
-  `debezium.public.orders` → `gold.order-revenue-1m` (Flink job) via the OpenLineage API.
+- **dbt — automatic**: the `dbt_build_gold` DAG task runs `dbt-ol build`, adding the
+  silver → dbt → gold edges with model metadata.
+- **Debezium, Flink & the EL loader — declarative**:
+  [scripts/register_lineage.py](scripts/register_lineage.py) registers
+  Postgres → `debezium.public.*` (connector),
+  `debezium.public.orders` → `gold.order-revenue-1m` (Flink job) and
+  Frankfurter API → `raw.events` (exchange-rates loader) via the OpenLineage API.
 
 ```bash
 kubectl port-forward svc/marquez 5000:5000 -n lineage &
 python3 scripts/register_lineage.py                        # upstream edges
 kubectl port-forward svc/marquez-web 3000:3000 -n lineage  # → http://localhost:3000
 ```
+
+## BI serving (Superset)
+
+Superset runs in the Compose dev stack under the opt-in `bi` profile — Docker-side RAM,
+not the k3s budget — with the `Trino-Iceberg` connection pre-registered against the
+port-forwarded cluster Trino:
+
+```bash
+kubectl port-forward svc/trino 8080:8080 -n lakehouse --address 0.0.0.0 &
+docker compose -f docker-compose.dev.yml --profile bi up -d superset
+# → http://localhost:8088 (admin / $SUPERSET_ADMIN_PASSWORD)
+```
+
+Dashboards on `gold.daily_revenue` and `gold.customer_metrics` are versioned as native
+exports in [observability/superset/](observability/superset/) (import/export round-trip
+documented there).
 
 ## Roadmap
 
@@ -239,15 +277,16 @@ The three pillars of [docs/roadmap.md](docs/roadmap.md) are implemented:
 - [x] **Observability**: pipeline business dashboard, postgres/MinIO exporters, actionable alerts
 - [x] **Lineage**: OpenLineage + Marquez — automatic Spark lineage, declarative CDC graph
 
-Next iteration (detailed plan in [docs/roadmap.md](docs/roadmap.md#roadmap-v2--orchestration-transformation--serving)):
+Roadmap v2 (detailed plan in [docs/roadmap.md](docs/roadmap.md#roadmap-v2--orchestration-transformation--serving)):
 
-- [ ] **Airflow** — DAG-driven pipeline with the quality gate as a blocking task
-- [ ] **dbt Core on Trino** — SQL-first Gold layer, tested, emitting lineage to Marquez
-- [ ] **ArgoCD effectif** — cluster reconciled from git, no manual `kubectl apply`
-- [ ] **Terraform** — declarative bootstrap (local) + EKS/MSK/S3 skeleton (cloud path)
-- [ ] **Second ingestion path** — Polars loader for an external API → `raw.kafka_events`
-- [ ] **Superset** — BI dashboard on the Gold tables through Trino
-- [ ] Hardening: prebaked Spark image, Iceberg maintenance DAG, External Secrets Operator
+- [x] **Airflow** — DAG-driven pipeline with the quality gate as a blocking task
+- [x] **dbt Core on Trino** — SQL-first Gold layer, tested, emitting lineage to Marquez
+- [x] **ArgoCD effectif** — core install, cluster auto-synced from git
+- [x] **Terraform** — operators via Helm releases (local) + EKS/MSK/S3 skeleton (cloud path)
+- [x] **Second ingestion path** — Polars loader for exchange rates → `raw.kafka_events`
+- [x] **Superset** — BI serving profile on the Gold tables through Trino
+- [x] Hardening: prebaked Spark batch image (jars + jobs bundled)
+- [ ] Next: Iceberg maintenance DAG, External Secrets Operator, GX 1.x migration
 
 ## Contact
 

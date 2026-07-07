@@ -2,12 +2,14 @@
 """Register declarative lineage for the pipeline stages without a native emitter.
 
 Spark emits its own OpenLineage events (openlineage-spark listener in the batch
-Job), but two upstream stages cannot (ADR-0008):
+Job), but three upstream stages cannot (ADR-0008, ADR-0011):
 
   - Debezium (Postgres → debezium.public.* Kafka topics) has no OpenLineage
     integration.
   - The PyFlink Table API job (debezium.public.orders → gold.order-revenue-1m)
     is not covered by the Flink OpenLineage agent yet.
+  - The exchange-rates loader (Frankfurter API → raw.events) is a plain
+    Python/Polars script with no emitter.
 
 This script posts static START+COMPLETE run events describing those edges to
 the Marquez HTTP API, so the full graph Postgres → Kafka → {Flink, Spark} →
@@ -37,6 +39,7 @@ DOC_FACET_URL = "https://openlineage.io/spec/facets/1-0-0/DocumentationJobFacet.
 # Dataset namespaces follow the OpenLineage naming spec (scheme://authority).
 POSTGRES_NS = "postgres://postgres.streaming.svc.cluster.local:5432"
 KAFKA_NS = "kafka://kafka-dev-kafka-bootstrap.streaming.svc.cluster.local:9092"
+EXCHANGE_API_NS = "https://api.frankfurter.dev"
 
 # Source table schemas — mirror infra/kubernetes/base/postgres/init.sql.
 PG_TABLES: dict[str, list[tuple[str, str]]] = {
@@ -79,6 +82,16 @@ FLINK_SINK_FIELDS: list[tuple[str, str]] = [
     ("order_count", "bigint"),
     ("total_revenue", "decimal(14,2)"),
     ("avg_order_value", "decimal(12,2)"),
+]
+
+# Exchange-rate event schema — mirrors pipelines/ingestion/exchange_rates_loader.py.
+RATE_EVENT_FIELDS: list[tuple[str, str]] = [
+    ("event_type", "varchar"),
+    ("base", "varchar"),
+    ("currency", "varchar"),
+    ("rate", "double"),
+    ("rate_date", "date"),
+    ("fetched_at", "timestamp"),
 ]
 
 
@@ -159,6 +172,20 @@ def build_events(namespace: str) -> list[dict]:
             "support is still limited upstream.",
             inputs=[dataset(KAFKA_NS, "debezium.public.orders")],
             outputs=[dataset(KAFKA_NS, "gold.order-revenue-1m", FLINK_SINK_FIELDS)],
+        )
+    )
+
+    # EL lane: Polars loader pulling ECB reference rates into raw.events
+    # (ADR-0011). Declarative edge — the loader has no OpenLineage emitter.
+    events.extend(
+        run_events(
+            namespace,
+            "exchange-rates-loader",
+            "Exchange-rates loader (pipelines/ingestion/): Frankfurter API "
+            "-> Polars -> raw.events, one event per quoted currency. "
+            "Declarative edge — plain Python script without an emitter.",
+            inputs=[dataset(EXCHANGE_API_NS, "v1/latest")],
+            outputs=[dataset(KAFKA_NS, "raw.events", RATE_EVENT_FIELDS)],
         )
     )
 

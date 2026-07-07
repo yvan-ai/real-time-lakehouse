@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# db-init-job.yaml is intentionally NOT listed: Jobs are immutable, so it is
+# deleted and re-applied by bootstrap.sh (same pattern as marquez-db-init).
+resources:
+  - deployment.yaml
+  - service.yaml
+  - rbac.yaml

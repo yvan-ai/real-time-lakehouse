@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: silver
+    description: Silver layer — deduplicated, typed CDC entities (Spark-produced).
+    database: iceberg
+    schema: silver
+    tables:
+      - name: orders
+        description: Last-write-wins order rows parsed from debezium.public.orders.
+      - name: customers
+        description: Last-write-wins customer rows parsed from debezium.public.customers.
+      - name: order_items
+        description: Order line items with computed line_total.

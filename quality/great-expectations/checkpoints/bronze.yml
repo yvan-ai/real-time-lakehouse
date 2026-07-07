@@ -6,13 +6,14 @@ template_name: null
 module_name: great_expectations.checkpoint
 
 validations:
-  # raw.kafka_events is not validated: no producer feeds the raw-events topic
-  # yet, so the table is legitimately empty. Re-enable when it is wired:
-  # - batch_request:
-  #     datasource_name: trino_lakehouse
-  #     data_connector_name: default_inferred_data_connector_name
-  #     data_asset_name: raw.kafka_events
-  #   expectation_suite_name: bronze_kafka_events
+  # Fed by the exchange-rates loader (pipelines/ingestion/, ADR-0011) via the
+  # Bronze raw-events pass. An empty table fails the row-count expectation by
+  # design: an empty second ingestion lane is a broken second lane.
+  - batch_request:
+      datasource_name: trino_lakehouse
+      data_connector_name: default_inferred_data_connector_name
+      data_asset_name: raw.kafka_events
+    expectation_suite_name: bronze_kafka_events
 
   - batch_request:
       datasource_name: trino_lakehouse

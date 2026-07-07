@@ -183,8 +183,11 @@ metadata:
   namespace: orchestration
 spec:
   hard:
-    requests.memory: "512Mi"
-    limits.memory: "1Gi"
+    # Sized for the standalone Airflow pod (scheduler + webserver in one
+    # container, 768Mi/1.25Gi) — ADR-0009. Task pods run in spark /
+    # data-quality / lineage under their own quotas.
+    requests.memory: "1Gi"
+    limits.memory: "1536Mi"
     requests.cpu: "500m"
     limits.cpu: "2"
     pods: "10"
@@ -205,8 +208,8 @@ spec:
         memory: "128Mi"
         cpu: "100m"
       max:
-        memory: "1Gi"
-        cpu: "1"
+        memory: "1536Mi"
+        cpu: "1500m"
 ---
 # ── monitoring (Prometheus, Grafana, OpenLineage) ──────────────────────────────
 apiVersion: v1
@@ -267,8 +270,10 @@ metadata:
   namespace: argocd
 spec:
   hard:
-    requests.memory: "256Mi"
-    limits.memory: "512Mi"
+    # Sized for ArgoCD *core*: application-controller + repo-server + redis
+    # (no API server / UI / Dex — see scripts/install-argocd.sh).
+    requests.memory: "512Mi"
+    limits.memory: "1Gi"
     requests.cpu: "250m"
     limits.cpu: "1"
     pods: "15"
@@ -281,11 +286,14 @@ metadata:
 spec:
   limits:
     - type: Container
+      # The upstream core-install manifests declare no resources; these
+      # defaults keep the controller/repo-server inside the quota without
+      # patching upstream YAML.
       default:
-        memory: "128Mi"
-        cpu: "100m"
+        memory: "256Mi"
+        cpu: "200m"
       defaultRequest:
-        memory: "64Mi"
+        memory: "96Mi"
         cpu: "50m"
       max:
         memory: "512Mi"

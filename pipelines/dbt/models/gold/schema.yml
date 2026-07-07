@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: daily_revenue
+    description: >
+      Daily revenue KPIs per report_date and currency. Complements — does not
+      replace — the Great Expectations gate (gold_daily_revenue suite): dbt
+      tests fail the build early, GX validates the served tables end to end.
+    columns:
+      - name: report_date
+        description: Aggregation date (UTC).
+        tests: [not_null]
+      - name: currency
+        description: ISO 4217 currency code ('USD' fallback).
+        tests: [not_null]
+      - name: order_count
+        description: Number of revenue-bearing orders on this date.
+        tests: [not_null]
+      - name: net_revenue
+        description: Sum of line revenue (item totals, falling back to order total).
+        tests: [not_null]
+
+  - name: customer_metrics
+    description: >
+      Lifetime value, recency and churn KPIs per customer (90-day churn
+      threshold, same as the Spark fallback job).
+    columns:
+      - name: customer_id
+        description: Business key, one row per customer.
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: source('silver', 'customers')
+              field: customer_id
+      - name: total_orders
+        tests: [not_null]
+      - name: is_churned
+        tests: [not_null]

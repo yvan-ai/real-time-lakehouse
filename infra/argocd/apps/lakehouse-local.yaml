@@ -22,8 +22,14 @@ spec:
     namespace: lakehouse
 
   syncPolicy:
-    # Manual sync for local — operator triggers via CD workflow or ArgoCD UI.
-    automated: null
+    # Auto-sync (roadmap pillar 6): merging to main changes the running pods
+    # with no human kubectl apply. prune stays FALSE for now — Jobs
+    # (batch-pipeline, quality-gate, *-db-init) and script-managed ConfigMaps
+    # (batch-spark-jobs, quality-gate-*, register-lineage-script) plus the
+    # secretGenerator output live outside git and must not be deleted.
+    automated:
+      prune: false
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true

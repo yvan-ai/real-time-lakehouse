@@ -52,3 +52,8 @@ kubeconfig.yaml
 quality/great-expectations/uncommitted/validations/
 quality/great-expectations/uncommitted/data_docs/
 quality/great-expectations/uncommitted/profilers/
+
+# dbt local artifacts (runs from pipelines/dbt)
+pipelines/dbt/.user.yml
+pipelines/dbt/logs/
+pipelines/dbt/dbt_packages/

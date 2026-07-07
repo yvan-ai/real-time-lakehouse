@@ -10,9 +10,9 @@ spec:
 
   # Allow deployments only from this repository.
   sourceRepos:
-    - https://github.com/yvan-ai/real-time-lakehouse   # replace with actual repo URL
+    - https://github.com/yvan-ai/real-time-lakehouse
 
-  # Destination clusters and namespaces that applications in this project may target.
+  # Destination namespaces — every namespace the local overlay touches.
   destinations:
     - server: https://kubernetes.default.svc
       namespace: lakehouse
@@ -21,7 +21,13 @@ spec:
     - server: https://kubernetes.default.svc
       namespace: flink
     - server: https://kubernetes.default.svc
-      namespace: trino
+      namespace: monitoring
+    - server: https://kubernetes.default.svc
+      namespace: lineage
+    - server: https://kubernetes.default.svc
+      namespace: orchestration
+    - server: https://kubernetes.default.svc
+      namespace: data-quality
     - server: https://kubernetes.default.svc
       namespace: argocd
 

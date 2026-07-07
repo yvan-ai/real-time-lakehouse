@@ -56,6 +56,32 @@ jobs:
           pip install -r requirements-test.txt
           mypy
 
+  # ── 2b. dbt parse + SQL lint (no cluster needed) ──────────────────────────
+  lint-dbt:
+    name: dbt Parse & SQL Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dbt-trino + sqlfluff
+        run: pip install "dbt-trino==1.8.4" "sqlfluff==3.2.5"
+
+      - name: dbt parse
+        # parse compiles the project without connecting to Trino.
+        run: |
+          cd pipelines/dbt
+          dbt parse --profiles-dir . --target local
+
+      - name: sqlfluff lint
+        run: |
+          cd pipelines/dbt
+          sqlfluff lint models tests
+
   # ── 3. Unit tests (pytest + local PySpark) ────────────────────────────────
   test-python:
     name: Unit Tests
@@ -84,6 +110,40 @@ jobs:
             --cov \
             --cov-report=term-missing
 
+  # ── 3b. Terraform fmt + validate + tflint (no cloud credentials) ──────────
+  lint-terraform:
+    name: Terraform Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive infra/terraform
+
+      - name: terraform validate — local root
+        run: |
+          terraform -chdir=infra/terraform/local init -backend=false -input=false
+          terraform -chdir=infra/terraform/local validate
+
+      - name: terraform validate — aws root (plan-only skeleton)
+        run: |
+          terraform -chdir=infra/terraform/aws init -backend=false -input=false
+          terraform -chdir=infra/terraform/aws validate
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.54.0
+
+      - name: tflint
+        run: |
+          tflint --init --config "$(pwd)/infra/terraform/.tflint.hcl"
+          tflint --config "$(pwd)/infra/terraform/.tflint.hcl" --chdir infra/terraform/local
+          tflint --config "$(pwd)/infra/terraform/.tflint.hcl" --chdir infra/terraform/aws
+
   # ── 4. Validate Kubernetes manifests ─────────────────────────────────────
   validate-manifests:
     name: Validate K8s Manifests
@@ -94,19 +154,24 @@ jobs:
       - name: Setup Kustomize
         uses: imranismail/setup-kustomize@v2
 
-      - name: Provide placeholder env files for secretGenerator
-        # minio.env / marquez.env are gitignored (real credentials); the
-        # example files are enough to render manifests for validation.
+      - name: Provide placeholder env files for the secrets kustomization
+        # The env files are gitignored (real credentials); the example files
+        # are enough to render manifests for validation.
         run: |
-          cp infra/kubernetes/overlays/local/minio.env.example \
-             infra/kubernetes/overlays/local/minio.env
-          cp infra/kubernetes/overlays/local/marquez.env.example \
-             infra/kubernetes/overlays/local/marquez.env
+          for f in minio marquez airflow; do
+            cp "infra/kubernetes/overlays/local/secrets/${f}.env.example" \
+               "infra/kubernetes/overlays/local/secrets/${f}.env"
+          done
 
-      - name: kustomize build — local overlay
+      - name: kustomize build — local overlay + secrets
         # Render inside the workspace: the kubeconform container only mounts
         # /github/workspace, so /tmp on the runner is not visible to it.
-        run: kustomize build infra/kubernetes/overlays/local > rendered-manifests.yaml
+        run: |
+          kustomize build infra/kubernetes/overlays/local > rendered-manifests.yaml
+          # kustomize output has no trailing separator — without it the first
+          # secrets document merges into the last overlay document.
+          echo '---' >> rendered-manifests.yaml
+          kustomize build infra/kubernetes/overlays/local/secrets >> rendered-manifests.yaml
 
       - name: kubeconform
         uses: docker://ghcr.io/yannh/kubeconform:latest
@@ -138,6 +203,9 @@ jobs:
           - name: kafka-connect-lakehouse
             context: pipelines/streaming/kafka-connect
             dockerfile: pipelines/streaming/kafka-connect/Dockerfile
+          - name: spark-batch
+            context: pipelines/batch
+            dockerfile: pipelines/batch/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -178,7 +246,7 @@ jobs:
   data-docs:
     name: Publish Data Docs
     runs-on: ubuntu-latest
-    needs: [lint-python]
+    needs: [lint-python, lint-dbt]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_PAGES == 'true'
     permissions:
       pages: write
@@ -195,7 +263,9 @@ jobs:
           cache: pip
 
       - name: Install quality dependencies
-        run: pip install -r quality/great-expectations/requirements-quality.txt
+        run: |
+          pip install -r quality/great-expectations/requirements-quality.txt
+          pip install "dbt-trino==1.8.4"
 
       - name: Build GX Data Docs (config-only)
         # Renders the expectation-suite pages from the committed suites; the
@@ -212,10 +282,25 @@ jobs:
           context.build_data_docs()
           EOF
 
+      - name: Build dbt docs (no warehouse connection)
+        # --empty-catalog renders the docs from the manifest only, so the
+        # Trino datasource is never queried in CI.
+        run: |
+          cd pipelines/dbt
+          dbt docs generate --empty-catalog --profiles-dir . --target local
+
+      - name: Assemble Pages site (GX docs at /, dbt docs at /dbt/)
+        run: |
+          mkdir -p site/dbt
+          cp -r quality/great-expectations/uncommitted/data_docs/local_site/. site/
+          cp pipelines/dbt/target/index.html \
+             pipelines/dbt/target/manifest.json \
+             pipelines/dbt/target/catalog.json site/dbt/
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: quality/great-expectations/uncommitted/data_docs/local_site
+          path: site
 
       - name: Deploy to GitHub Pages
         id: deployment
