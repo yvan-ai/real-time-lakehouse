@@ -213,24 +213,30 @@ operational since pillar 1).
 
 ### 4.2 Deploy Airflow — L
 
-- [ ] `infra/kubernetes/base/airflow/`: Deployment, Service, db-init Job
+- [x] `infra/kubernetes/base/airflow/`: Deployment, Service, db-init Job
       (role + database in shared Postgres), `airflow.env` secretGenerator,
-      RBAC for `KubernetesPodOperator` (create pods in `spark`/`data-quality`).
-- [ ] Wire into `overlays/local` + `bootstrap.sh`; quotas already reserved.
+      RBAC for `KubernetesPodOperator` (create pods in
+      `spark`/`data-quality`/`lineage`).
+- [x] Wire into `overlays/local` + `bootstrap.sh`; orchestration quota
+      raised to the 1.5 Gi target.
 
 ### 4.3 The pipeline DAG — M
 
-- [ ] `pipelines/orchestration/dags/lakehouse_batch.py`:
-      `batch_bronze_silver_gold` (KubernetesPodOperator reusing the batch Job
-      spec) → `quality_gate` (blocking — failed expectations fail the DAG run,
-      exactly the PDF's month-5 target) → `register_lineage`.
-- [ ] Daily schedule + manual trigger; `scripts/run-batch.sh` stays as the
+- [x] `pipelines/orchestration/dags/lakehouse_batch.py`:
+      `batch_bronze_silver` (KubernetesPodOperator on the prebaked image) →
+      `dbt_build_gold` (5.2) → `quality_gate` (blocking — failed
+      expectations fail the DAG run, exactly the PDF's month-5 target) →
+      `register_lineage`.
+- [x] Daily schedule + manual trigger; `scripts/run-batch.sh` stays as the
       no-Airflow fallback.
-- [ ] Airflow task failures visible in the Lakehouse Pipeline dashboard
-      (kube-state-metrics already scrapes the spawned pods).
+- [x] Airflow task failures visible in the Lakehouse Pipeline dashboard
+      (failed pods are kept — `delete_succeeded_pod` — so
+      kube-state-metrics exposes them).
 
 **Done when**: one `airflow dags trigger lakehouse_batch` runs
 batch → gate → lineage end-to-end, and a red gate turns the DAG run red.
+*(manifests + DAG merged; live end-to-end trigger pending the next
+cluster deploy)*
 
 ---
 
@@ -238,19 +244,22 @@ batch → gate → lineage end-to-end, and a red gate turns the DAG run red.
 
 ### 5.1 dbt project on Trino — M
 
-- [ ] `pipelines/dbt/` project with `dbt-trino`: `gold.daily_revenue` and
-      `gold.customer_metrics` as incremental/table models reading
-      `iceberg.silver.*` — replaces `03_gold_aggregate.py` (Spark stays for
-      Bronze/Silver CDC parsing).
-- [ ] dbt tests (unique, not_null, relationships) complementing — not
-      replacing — the GX gate.
+- [x] `pipelines/dbt/` project with `dbt-trino`: `gold.daily_revenue` and
+      `gold.customer_metrics` as table models reading `iceberg.silver.*` —
+      replaces `03_gold_aggregate.py` on the DAG path (Spark stays for
+      Bronze/Silver CDC parsing and remains the Gold fallback in
+      `run-batch.sh` during the cutover).
+- [x] dbt tests (unique, not_null, relationships + a singular grain test)
+      complementing — not replacing — the GX gate.
 
 ### 5.2 Integration — S
 
-- [ ] DAG task `dbt_build` between silver and the quality gate (pillar 4).
-- [ ] `openlineage-dbt` emitter → the Marquez graph gains the dbt edges.
-- [ ] CI: `dbt parse` + `sqlfluff` lint (no cluster needed).
-- [ ] `dbt docs generate` published next to the GX Data Docs on Pages.
+- [x] DAG task `dbt_build_gold` between silver and the quality gate (pillar 4).
+- [x] `openlineage-dbt` emitter (`dbt-ol build`) → the Marquez graph gains
+      the dbt edges.
+- [x] CI: `dbt parse` + `sqlfluff` lint (no cluster needed).
+- [x] `dbt docs generate --empty-catalog` published under `/dbt/` next to
+      the GX Data Docs on Pages.
 
 **Done when**: the gate passes on a Gold layer produced by dbt, and the
 lineage graph shows silver → dbt → gold.
@@ -259,13 +268,16 @@ lineage graph shows silver → dbt → gold.
 
 ## Pillar 6 — ArgoCD: GitOps effectif
 
-- [ ] Install ArgoCD **core** (no UI pod, ~512 Mi) via `bootstrap.sh`;
-      apply the existing `infra/argocd/` project + application manifests.
-- [ ] Auto-sync the `lakehouse-local` application on `overlays/local`
-      (prune: false at first — Jobs and script-managed ConfigMaps must be
-      ignored via `argocd.argoproj.io/sync-options`).
-- [ ] CD workflow: replace the optional sync step with a real one
-      (`ARGOCD_SERVER` secret) or rely on auto-sync polling.
+- [x] Install ArgoCD **core** (no UI/API pods) via
+      `scripts/install-argocd.sh`, wired into `bootstrap.sh`; project +
+      application manifests applied.
+- [x] Auto-sync the `lakehouse-local` application on `overlays/local`
+      (prune: false + selfHeal). Prerequisite solved: secretGenerators moved
+      to `overlays/local/secrets/` (gitignored env files made the overlay
+      unbuildable for the repo-server); Jobs and script-managed ConfigMaps
+      live outside git so prune-off leaves them alone.
+- [x] CD workflow: relies on auto-sync polling (core install has no API
+      server for a CLI sync — the tag-bump commit is all CD needs).
 
 **Done when**: merging an image bump to `main` changes the running pods with
 no `kubectl apply` from a human.
@@ -274,13 +286,15 @@ no `kubectl apply` from a human.
 
 ## Pillar 7 — Terraform: infrastructure as code
 
-- [ ] `infra/terraform/local/`: replace `install-strimzi.sh` /
-      `install-flink-operator.sh` with `helm_release` resources + namespaces
-      via the kubernetes provider (k3s stays provisioned by `setup-k3s.sh`).
-- [ ] `infra/terraform/aws/` skeleton (EKS + MSK + S3) — `plan`-only,
+- [x] `infra/terraform/local/`: replaces `install-strimzi.sh` /
+      `install-flink-operator.sh` with `helm_release` resources + the
+      `flink-operator` namespace (k3s and `namespaces.yaml` stay with
+      `setup-k3s.sh`; scripts remain the no-CLI fallback in bootstrap).
+- [x] `infra/terraform/aws/` skeleton (VPC + EKS + MSK + S3) — `plan`-only,
       documented as the cloud path; no credentials in the repo.
-- [ ] CI: `terraform fmt -check` + `validate` + `tflint`.
-- [ ] ADR-0010 — IaC boundaries: what Terraform owns vs kustomize vs ArgoCD.
+- [x] CI: `terraform fmt -check` + `validate` + `tflint`.
+- [x] ADR-0010 — IaC boundaries: what Terraform owns vs kustomize vs ArgoCD
+      vs scripts.
 
 **Done when**: a fresh cluster reaches operator-ready state with
 `terraform apply` instead of the two install scripts.
@@ -293,14 +307,15 @@ The target stack has two ingestion lanes; only CDC exists here. Bonus: this
 feeds `raw.kafka_events`, whose GX suite is currently disabled for lack of a
 producer.
 
-- [ ] ADR-0011 — lightweight EL over Airbyte: Airbyte needs ≥ 2 Gi (does not
-      fit WSL2); use a **Polars-based loader** (`pipelines/ingestion/`)
-      pulling a public API (e.g. exchange rates — finally fills the `currency`
-      column) into the `raw-events` Kafka topic. Document Airbyte as the
-      industrial alternative, optionally in `docker-compose.dev.yml`.
-- [ ] Bronze job ingests `raw-events` → `raw.kafka_events`; re-enable the
-      `bronze_kafka_events` validation in the bronze checkpoint.
-- [ ] Declarative lineage edge in `register_lineage.py` (API → topic).
+- [x] ADR-0011 — lightweight EL over Airbyte: Airbyte needs ≥ 2 Gi (does not
+      fit WSL2); a **Polars-based loader** (`pipelines/ingestion/`) pulls
+      Frankfurter exchange rates (finally fills the `currency` column) into
+      the `raw.events` Kafka topic. Airbyte documented as the industrial
+      alternative.
+- [x] Bronze job ingests `raw.events` → `raw.kafka_events` (full-record
+      capture); `bronze_kafka_events` validation re-enabled in the bronze
+      checkpoint. The pure Polars transform is unit-tested.
+- [x] Declarative lineage edge in `register_lineage.py` (API → topic).
 
 **Done when**: the gate validates a non-empty `raw.kafka_events` and the
 Polars loader shows up in the Marquez graph.
@@ -309,11 +324,14 @@ Polars loader shows up in the Marquez graph.
 
 ## Pillar 9 — Superset: BI serving
 
-- [ ] Superset in `docker-compose.dev.yml` (profile `bi`, ~1.5 Gi — Docker
-      side, not the k3s budget) connected to Trino via the port-forward.
+- [x] Superset in `docker-compose.dev.yml` (profile `bi`, ~1.5 Gi — Docker
+      side, not the k3s budget) connected to Trino via the port-forward;
+      `Trino-Iceberg` connection pre-registered at boot.
 - [ ] One dashboard mirroring the Streamlit demo on `gold.daily_revenue` +
-      `gold.customer_metrics`; export its JSON to `observability/superset/`.
-- [ ] README: serving section + capture. In-cluster deployment only if the
+      `gold.customer_metrics`; export its JSON to `observability/superset/`
+      *(manual step once traffic runs — round-trip documented in
+      `observability/superset/README.md`)*.
+- [x] README: serving section. In-cluster deployment only if the
       legacy cleanup frees enough RAM (quota math first).
 
 **Done when**: a Superset dashboard renders the Gold tables through Trino.
@@ -322,8 +340,9 @@ Polars loader shows up in the Marquez graph.
 
 ## Platform hardening (folded from the README backlog)
 
-- [ ] Prebaked Spark batch image (jars bundled) — kills the Maven/PyPI
-      flakiness that bit pillars 1 and 3 — **S/M, do first**.
+- [x] Prebaked Spark batch image (jars + job scripts bundled,
+      `pipelines/batch/Dockerfile`) — kills the Maven/PyPI flakiness that
+      bit pillars 1 and 3; CI pushes it, CD bumps the tag.
 - [ ] Iceberg maintenance DAG (compaction + snapshot expiry) — natural
       Airflow follow-up to pillar 4 — M.
 - [ ] External Secrets Operator (the commented `ExternalSecret` manifests
