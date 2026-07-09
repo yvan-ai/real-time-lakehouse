@@ -23,6 +23,15 @@ kubectl apply -n "${NAMESPACE}" -f "${MANIFEST_URL}"
 kubectl scale deployment argocd-applicationset-controller -n "${NAMESPACE}" \
   --replicas=0 2>/dev/null || true
 
+# The upstream manifests declare no resources, so the LimitRange default
+# (200m CPU) applies — too little for the application controller: the
+# ServerSideApply dry-run over the large Strimzi CRDs starves and the first
+# sync never completes (seen live). Give it an explicit, quota-sized slice.
+kubectl -n "${NAMESPACE}" patch statefulset argocd-application-controller --type='json' -p='[
+  {"op":"add","path":"/spec/template/spec/containers/0/resources","value":
+    {"requests":{"cpu":"200m","memory":"256Mi"},"limits":{"cpu":"500m","memory":"512Mi"}}}
+]'
+
 echo "Waiting for the application controller and repo server..."
 kubectl rollout status statefulset/argocd-application-controller \
   -n "${NAMESPACE}" --timeout=300s

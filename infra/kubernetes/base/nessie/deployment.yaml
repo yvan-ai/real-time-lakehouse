@@ -35,6 +35,12 @@ spec:
           env:
             - name: NESSIE_VERSION_STORE_TYPE
               value: ROCKSDB
+            # RocksDB defaults to a path under /tmp (container-ephemeral):
+            # the catalog silently vanished on every pod restart even though
+            # the PVC was mounted (seen live — 22 restarts, empty catalog).
+            # Point the store INTO the PVC mount.
+            - name: NESSIE_VERSION_STORE_ROCKS_DB_PATH
+              value: /var/lib/nessie/rocksdb
           resources:
             requests:
               memory: "256Mi"

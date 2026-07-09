@@ -40,7 +40,9 @@ COMMON_KPO_ARGS = {
     "in_cluster": True,
     "get_logs": True,
     "image_pull_policy": "IfNotPresent",
-    "startup_timeout_seconds": 300,
+    # 30 min: first-ever pull of the spark-batch image takes >5 min on this
+    # link (seen live) and the default would flake the task before it starts.
+    "startup_timeout_seconds": 1800,
     # Keep failed pods around for inspection + kube-state-metrics alerting.
     "on_finish_action": "delete_succeeded_pod",
 }
