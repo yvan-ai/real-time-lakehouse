@@ -50,7 +50,13 @@ def fetch_rates(base: str) -> dict:
     Returns:
         Decoded API payload: ``{"base": ..., "date": ..., "rates": {...}}``.
     """
-    with urllib.request.urlopen(f"{API_URL}?base={base}", timeout=30) as response:
+    # Frankfurter (Cloudflare) rejects urllib's default User-Agent with a 403;
+    # any identifying UA is accepted — verified live on 2026-07-09.
+    request = urllib.request.Request(
+        f"{API_URL}?base={base}",
+        headers={"User-Agent": "real-time-lakehouse-loader/1.0"},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)
 
 

@@ -21,6 +21,8 @@ spec:
     - server: https://kubernetes.default.svc
       namespace: flink
     - server: https://kubernetes.default.svc
+      namespace: spark
+    - server: https://kubernetes.default.svc
       namespace: monitoring
     - server: https://kubernetes.default.svc
       namespace: lineage
