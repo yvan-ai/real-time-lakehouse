@@ -1,63 +1,65 @@
-# Compte rendu — Roadmap v2 : vérification live en attente
+# Compte rendu — Roadmap v2 : vérification live ✅ FAITE (2026-07-12)
 
-**Date** : 2026-07-07 · **Statut** : à faire — reprendre ici à la prochaine session.
-*(Note de travail interne, en français volontairement. À supprimer une fois la
-vérification faite et les captures intégrées au README.)*
+**Statut** : la boucle de vérification est **terminée**. Il ne reste que les
+captures d'écran (étape manuelle, voir « Reste à faire » en bas).
+*(Note de travail interne, en français volontairement.)*
 
-## Contexte
+## Preuves obtenues le 2026-07-12
 
-La roadmap v2 (piliers 4–9 + image Spark prébakée) est **mergée sur `main`**
-(PR #1, 13 commits), la CI/CD est verte de bout en bout, les Data Docs GX + dbt
-sont publiées sur Pages, le README est à jour (sections descriptives + métriques).
-
-## Le constat (vérifié sur le cluster le 2026-07-07)
-
-**La v2 est code-complete mais n'a jamais tourné sur le k3s.** Le repo décrit un
-état que la machine ne réalise pas encore :
-
-| Vérification | Résultat |
+| Critère « Done when » | Preuve |
 |---|---|
-| `kubectl get pods -n orchestration` | vide — **aucun pod Airflow**, le DAG n'a jamais tourné |
-| `kubectl get pods -n argocd` | vide — **ArgoCD pas installé** (pas même les CRDs) |
-| Dernier Job `quality-gate` | antérieur au merge (v1) |
-| Graphe Marquez | sans les arêtes dbt ni l'arête exchange-rates |
-| Captures README | une seule (Streamlit v1) — rien sur les nouveautés |
+| DAG `lakehouse_batch` end-to-end | **Run vert complet** : batch_bronze_silver → dbt_build_gold → quality_gate → register_lineage (run `scheduled__2026-07-11`) |
+| Gate rouge ⇒ DAG rouge | Déclenché **organiquement** : la rétention 24 h de `raw.events` avait vidé la lane EL → `bronze_kafka_events` 14/16 → gate failed → DAG failed. Après re-run du loader : gate 96/96 |
+| Gold produit par dbt | 5 jours, 385 commandes, 218 180,92 de CA dans `gold.daily_revenue` ; 200 clients dans `customer_metrics` — suites GX gold 33/33 sur les tables dbt (parité Spark→dbt validée) |
+| GitOps effectif | selfHeal a recréé un Deployment supprimé en ~20 s, et a réverté un ConfigMap modifié sans commit en ~3 min |
+| Lineage complet | 22 jobs dans Marquez : Spark (bronze/silver/gold), **dbt par modèle** (build.run/test), Debezium, Flink, exchange-rates-loader |
+| Persistance Nessie | Pod tué → tables intactes, fichiers RocksDB dans le PVC |
 
-Conséquence : les critères « Done when » de la roadmap sont **non vérifiés** —
-personne n'a vu un `lakehouse_batch` passer de bout en bout, un gate rouge rendre
-le DAG rouge, ni un merge sur `main` rouler les pods sans `kubectl apply`.
+## Les 9 bugs débusqués (et corrigés) par le live
 
-## La boucle de clôture (dans l'ordre)
+1. **Loader 403** — Cloudflare rejette le User-Agent urllib par défaut → UA custom.
+2. **Projet ArgoCD sans destination `spark`** → toutes les syncs invalides.
+3. **Contrôleur ArgoCD affamé** (LimitRange 200m + quota requests.cpu 250m)
+   → sync infinie ; ressources explicites + quota 500m/1500m.
+4. **Catalogue Nessie perdu à chaque restart** — 0.62 écrit RocksDB en dur dans
+   `/tmp/nessie-rocksdb-store`, le PVC était monté ailleurs → subPath sur le
+   chemin réel (vérifié par `docker diff`).
+5. **KPO startup_timeout 300 s** < premier pull d'image → 1800 s.
+6. **curl sans reprise sur transfert partiel** (l'egress WSL tronque le bundle
+   AWS de 280 Mo) → boucle de reprise `-C -` dans le Dockerfile.
+7. **Le nœud ne peut pas puller la couche de 750 Mo depuis GHCR** → build local
+   + import containerd ; sudo sans mot de passe indisponible → import via pod
+   `kubectl debug node/` privilégié.
+8. **Walker Airflow en boucle récursive** sur le montage ConfigMap (`..data`)
+   → zéro DAG parsé → `.airflowignore` embarqué dans le ConfigMap.
+9. **openlineage-dbt 1.24 sans adapter trino** (`NotImplementedError`) → 1.51.
 
-1. **Déployer** : `./scripts/deploy.sh` (Airflow + ConfigMaps dags/dbt), puis
-   `./scripts/install-argocd.sh` et
-   `kubectl apply -f infra/argocd/project.yaml -f infra/argocd/apps/lakehouse-local.yaml`.
-2. **Trafic** : `make demo` + le loader
-   `python3 pipelines/ingestion/exchange_rates_loader.py` (port-forward du broker).
-3. **DAG end-to-end** : déclencher `lakehouse_batch` (UI via
-   `kubectl port-forward svc/airflow 8081:8080 -n orchestration`, ou
-   `kubectl exec -n orchestration deploy/airflow -- airflow dags trigger lakehouse_batch`).
-   Puis **casser volontairement une expectation** et re-déclencher : le gate doit
-   rendre le DAG rouge — c'est le test le plus démonstratif du projet.
-4. **Preuve GitOps** : merger un bump d'image sur `main` et constater que les pods
-   roulent sans intervention (auto-sync ArgoCD, polling ~3 min).
-5. **Captures → README** : run DAG vert/rouge, graphe Marquez complet
-   (roadmap 3.5), dashboard Grafana « Lakehouse Pipeline » (roadmap 2.5),
-   dashboard Superset + export JSON vers `observability/superset/` (pilier 9).
+## Leçons d'exploitation (runbook)
 
-## Pièges connus
+- **Reboot WSL** ⇒ pods `Unknown`/CrashLoop : force-delete des pods périmés,
+  reset des backoffs ; le StrimziPodSet peut rester bloqué sur un état stale
+  (supprimer le SPS, l'opérateur le recrée). Les ClusterRoles Strimzi avaient
+  été supprimés par le nettoyage legacy → `install-strimzi.sh` les restaure.
+- **Kafka emptyDir** : survit à un restart de conteneur in-place, pas à une
+  recréation de pod. `raw.events` a une rétention de 24 h : relancer le loader
+  avant une démo si les événements ont expiré (le gate le rappellera).
+- **ConfigMaps montés** : ~60–90 s de propagation kubelet ; et surtout, avec
+  selfHeal actif, **un apply non commité est réverté par ArgoCD** — commiter
+  puis appliquer, jamais l'inverse.
+- **CLI Airflow via kubectl exec** : exporter
+  `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN` (construite dans la commande du
+  conteneur, absente du spec) sinon la CLI retombe sur sqlite.
 
-- **Opérateurs déjà installés par scripts** : `terraform import` requis avant que
-  `infra/terraform/local` les gère (sinon doublon) — voir `infra/terraform/README.md`.
-- **Fichiers env déplacés** : les credentials réels sont désormais dans
-  `infra/kubernetes/overlays/local/secrets/` (bootstrap/deploy pointent déjà dessus).
-- **Repo privé = casse** : passer en privé supprime le site Pages (recréer via
-  `gh api -X POST .../pages -f build_type=workflow`) et exigera des credentials
-  ArgoCD + éventuel imagePullSecret GHCR. Basculer `ENABLE_PAGES=false` d'abord.
-- **RAM** : Airflow (1,25 Gi) + ArgoCD core (~0,5 Gi) arrivent en plus — surveiller
-  les quotas au premier deploy (`kubectl describe quota -A`).
+## Reste à faire (manuel, avec le stack encore chaud)
 
-## Critère de fin
+Captures pour le README (roadmap 2.5 / 3.5 / pilier 9) :
+- Run DAG vert : `kubectl port-forward svc/airflow 8081:8080 -n orchestration`
+  → http://localhost:8081 (admin / voir `secrets/airflow.env`)
+- Graphe Marquez : `kubectl port-forward svc/marquez-web 3000:3000 -n lineage`
+  → http://localhost:3000 (22 jobs, namespace lakehouse)
+- Grafana « Lakehouse Pipeline » : `kubectl port-forward svc/grafana 3001:3000 -n monitoring`
+- Superset : `docker compose -f docker-compose.dev.yml --profile bi up -d superset`
+  + port-forward Trino `--address 0.0.0.0` → dashboard + export JSON vers
+  `observability/superset/`.
 
-Les cases restantes de `docs/roadmap.md` (2.5, 3.5, dashboard Superset) cochées,
-et le README montrant les preuves visuelles. Cette note peut alors être supprimée.
+Cette note peut être supprimée une fois les captures intégrées au README.

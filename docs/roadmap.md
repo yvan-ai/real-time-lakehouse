@@ -235,8 +235,9 @@ operational since pillar 1).
 
 **Done when**: one `airflow dags trigger lakehouse_batch` runs
 batch → gate → lineage end-to-end, and a red gate turns the DAG run red.
-*(manifests + DAG merged; live end-to-end trigger pending the next
-cluster deploy)*
+*(✓ verified live 2026-07-12: full green run batch → dbt → gate → lineage;
+the red-gate case fired organically — the 24 h retention on `raw.events`
+had emptied the EL lane and the gate failed the DAG exactly as designed)*
 
 ---
 
@@ -281,6 +282,9 @@ lineage graph shows silver → dbt → gold.
 
 **Done when**: merging an image bump to `main` changes the running pods with
 no `kubectl apply` from a human.
+*(✓ verified live 2026-07-12: selfHeal recreated a deleted Deployment in
+~20 s, and reverted an uncommitted ConfigMap drift within minutes — DAG
+changes only exist once merged, as designed)*
 
 ---
 
@@ -319,6 +323,8 @@ producer.
 
 **Done when**: the gate validates a non-empty `raw.kafka_events` and the
 Polars loader shows up in the Marquez graph.
+*(✓ verified live 2026-07-12: gate 96/96 with 5 FX events landed in Bronze;
+`exchange-rates-loader` and the per-model dbt jobs visible in Marquez)*
 
 ---
 
