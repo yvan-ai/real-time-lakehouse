@@ -9,5 +9,8 @@ configMapGenerator:
   - name: airflow-dags
     files:
       - dags/lakehouse_batch.py
+      # Prunes the '..data'/'..<timestamp>' ConfigMap-mount entries that send
+      # the DAG-directory walker into a recursive loop.
+      - .airflowignore
     options:
       disableNameSuffixHash: true

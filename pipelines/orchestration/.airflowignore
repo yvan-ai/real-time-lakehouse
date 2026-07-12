@@ -1,0 +1,5 @@
+# Kubernetes ConfigMap mounts create '..data' + '..<timestamp>' entries that
+# Airflow's DAG-directory walker follows into a recursive loop ("Detected
+# recursive loop when walking DAG directory" — seen live, zero DAGs parsed).
+# Regex syntax: prune every dot-dot entry.
+\.\.
