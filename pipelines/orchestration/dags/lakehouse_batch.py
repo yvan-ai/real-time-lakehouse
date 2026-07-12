@@ -85,8 +85,9 @@ echo "[1/3] Installing dbt-trino + openlineage-dbt..."
 # Full-command retry loop: pod egress drops large downloads mid-stream on
 # this cluster (same pattern as the quality gate).
 for attempt in 1 2 3 4 5; do
+  # openlineage-dbt < 1.51 has no trino adapter (NotImplementedError seen live)
   pip install --no-cache-dir --quiet --retries 10 --timeout 60 \
-    "dbt-trino==1.8.4" "openlineage-dbt==1.24.2" && break
+    "dbt-trino==1.8.4" "openlineage-dbt==1.51.0" && break
   echo "pip install failed (attempt ${attempt}/5) — retrying in 15s..."
   [[ "${attempt}" == "5" ]] && exit 1
   sleep 15
