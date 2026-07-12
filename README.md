@@ -10,8 +10,9 @@
 
 A production-grade **streaming + batch lakehouse** that fits on a single 16 GB laptop:
 **~60 s from a Postgres commit to a live dashboard** on the hot path, **9 Iceberg tables**
-across a medallion architecture, and **9 expectation suites + 10 dbt tests** gating every
-run — under simulated e-commerce load.
+across a medallion architecture, and **96 GX expectations + 10 dbt tests** gating every
+run — the whole loop **verified end to end on the running cluster** under simulated
+e-commerce load (see [Results & metrics](#results--metrics)).
 
 Postgres changes are captured by **Debezium CDC** and streamed through **Kafka**; **Flink**
 aggregates them in real time (exactly-once, 1-minute event-time windows) while **Spark** and
@@ -92,7 +93,7 @@ Two paths consume the same CDC stream:
 | Stream processing | Flink 1.20 (PyFlink Table API) | Real-time windowed aggregation, exactly-once |
 | Batch processing | Spark 3.5 (PySpark) | Medallion transformations Bronze→Silver→Gold |
 | Table format | Iceberg 1.5 | ACID tables, schema evolution, time travel |
-| Catalog | Nessie 0.62 | Iceberg REST catalog (no Hive metastore) |
+| Catalog | Nessie 0.62 | Iceberg REST catalog (no Hive metastore), RocksDB persisted on a PVC |
 | Object store | MinIO | S3-compatible warehouse storage |
 | Query engine | Trino 435 | Federated SQL over Iceberg |
 | Transformation | dbt Core (dbt-trino) | SQL-first Gold models + tests, docs on Pages |
@@ -128,21 +129,27 @@ Two paths consume the same CDC stream:
 ### Option A — Full stack on k3s (recommended)
 
 ```bash
-# 1. Provision everything: k3s, Strimzi, Flink operator, MinIO, Postgres,
-#    Kafka, Nessie, Trino, monitoring, topics, Debezium connector
+# 1. Provision everything: k3s, operators (Terraform or scripts), MinIO,
+#    Postgres, Kafka, Nessie, Trino, Airflow, ArgoCD, monitoring, Debezium
 ./scripts/bootstrap.sh
 
-# 2. Create the Iceberg tables (runs Spark in Docker, no local install)
+# 2. Build the prebaked Spark image and import it into k3s containerd
+#    (all jars bundled — no runtime Maven downloads; the table init and the
+#    batch both run on it, so flaky egress never touches the data path)
+./scripts/build-batch-image.sh
+
+# 3. Create the Iceberg tables (runs on the prebaked image, no local Spark)
 ./scripts/run-iceberg-init.sh
 
-# 3. Run the batch pipeline Bronze → Silver → Gold
+# 4. Run the batch pipeline Bronze → Silver → Gold
 #    (on success the Great Expectations quality gate runs automatically)
 ./scripts/run-batch.sh
 #    …or let Airflow drive it: batch → dbt → gate → lineage
 kubectl port-forward svc/airflow 8081:8080 -n orchestration
-# → http://localhost:8081, trigger the lakehouse_batch DAG
+# → http://localhost:8081 (admin / see overlays/local/secrets/airflow.env),
+#   unpause the lakehouse_batch DAG — the scheduler runs it daily
 
-# 4. Query with Trino
+# 5. Query with Trino
 kubectl port-forward svc/trino 8080:8080 -n lakehouse
 # → SELECT * FROM iceberg.gold.daily_revenue;
 ```
@@ -239,9 +246,13 @@ lifetime value, churn flags).
   fit the 16 GB budget ([ADR-0011](docs/decisions/0011-lightweight-el-over-airbyte.md)).
 
 ```bash
-python3 pipelines/ingestion/exchange_rates_loader.py --dry-run   # inspect the events
-python3 pipelines/ingestion/exchange_rates_loader.py             # produce to raw.events
+python3 pipelines/ingestion/exchange_rates_loader.py --dry-run                    # inspect the events
+python3 pipelines/ingestion/exchange_rates_loader.py --bootstrap localhost:32100  # produce (k3s nodeport)
 ```
+
+`raw.events` keeps 24 h of history: rerun the loader before a batch if the
+events have aged out — otherwise the gate fails the run on an empty lane,
+which is exactly what it is there for (proven live).
 
 ## Orchestration (Airflow)
 
@@ -259,14 +270,21 @@ batch_bronze_silver (Spark) → dbt_build_gold (Trino) → quality_gate (blockin
 - **Work runs elsewhere** — every task is a `KubernetesPodOperator` pod spawned in the
   namespace that owns the work (`spark`, `data-quality`, `lineage`) under its own quota,
   with namespace-scoped RBAC only.
-- **The gate blocks** — one failed expectation fails the gate pod, the task and the DAG
-  run; failed pods are kept so kube-state-metrics can alert on them.
-- **DAGs deploy like everything else** — shipped as a kustomize-generated ConfigMap;
-  `scripts/run-batch.sh` remains the no-Airflow fallback.
+- **The gate blocks — proven live** — one failed expectation fails the gate pod, the
+  task and the DAG run (verified 2026-07-12: an empty EL lane turned the run red;
+  refilling it turned the rerun green, 96/96). Failed pods are kept so
+  kube-state-metrics can alert on them.
+- **DAGs deploy like everything else** — shipped as a kustomize-generated ConfigMap
+  (with an `.airflowignore` pruning the mount's `..data` entries — Airflow's directory
+  walker loops on them otherwise); `scripts/run-batch.sh` remains the no-Airflow fallback.
 
 ```bash
-kubectl port-forward svc/airflow 8081:8080 -n orchestration      # UI → http://localhost:8081
-kubectl exec -n orchestration deploy/airflow -- airflow dags trigger lakehouse_batch
+kubectl port-forward svc/airflow 8081:8080 -n orchestration   # UI → http://localhost:8081
+# CLI trigger — the DB conn string is built in the container command, not the
+# pod env, so an exec'd CLI must recreate it:
+kubectl exec -n orchestration deploy/airflow -- bash -c 'export \
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres.streaming.svc.cluster.local:5432/airflow" \
+  && airflow dags trigger lakehouse_batch'
 ```
 
 ## SQL-first Gold layer (dbt)
@@ -386,16 +404,28 @@ draws the boundaries between Terraform, kustomize, ArgoCD and the scripts):
 
 ## Results & metrics
 
-Measured on the demo e-commerce load (traffic generator) on a single 16 GB WSL2 laptop:
+Verified **live on the running cluster** (2026-07-12) under simulated e-commerce load,
+on a single 16 GB WSL2 laptop:
 
 | Metric | Value |
 |---|---|
+| End-to-end Airflow run (Spark → dbt → GX gate → lineage) | ✅ green — and a **red-gate run proven**: an empty EL lane failed the whole DAG, by design |
+| Data-quality checks gating each run | 96 GX expectations (9 suites) + 10 dbt tests, blocking |
+| Gold served through Trino (built by dbt) | 385 orders · 218,180.92 revenue across 5 days of demo load |
+| Lineage graph in Marquez | 22 jobs — Spark, per-model dbt, Debezium, Flink, EL loader |
+| GitOps selfHeal (ArgoCD core) | deleted Deployment recreated in ~20 s; uncommitted drift reverted in minutes |
 | Hot-path latency (Postgres commit → dashboard) | ~60 s (1-minute event-time windows) |
-| Iceberg tables (Bronze / Silver / Gold) | 9 (4 / 3 / 2) |
-| Data-quality checks gating each run | 9 GX suites + 10 dbt tests, blocking gate Job |
+| Iceberg tables (Bronze / Silver / Gold) | 9 (4 / 3 / 2), catalog surviving pod restarts (RocksDB on PVC) |
 | Kubernetes resources under GitOps | 80+ across 9 quota-guarded namespaces |
 | CI checks on every commit | 10 jobs — lint, types, unit tests, dbt, Terraform, kubeconform, images, docs |
 | Architecture Decision Records | 11 |
+
+**Battle-tested** — the live verification surfaced and fixed **nine real defects**
+(`git log --oneline --grep="fix(live)"`): a Nessie catalog silently vanishing on every
+pod restart, Airflow parsing zero DAGs because of the ConfigMap mount layout, an ArgoCD
+controller starved below its first sync, a lineage emitter with no trino adapter, an
+egress link that truncates large downloads, and more. Each fix is an atomic commit
+carrying its own post-mortem.
 
 ## Roadmap
 
@@ -405,7 +435,8 @@ The three pillars of [docs/roadmap.md](docs/roadmap.md) are implemented:
 - [x] **Observability**: pipeline business dashboard, postgres/MinIO exporters, actionable alerts
 - [x] **Lineage**: OpenLineage + Marquez — automatic Spark lineage, declarative CDC graph
 
-Roadmap v2 (detailed plan in [docs/roadmap.md](docs/roadmap.md#roadmap-v2--orchestration-transformation--serving)):
+Roadmap v2 — delivered and **verified live** on the cluster, 2026-07-12 (detailed plan
+in [docs/roadmap.md](docs/roadmap.md#roadmap-v2--orchestration-transformation--serving)):
 
 - [x] **Airflow** — DAG-driven pipeline with the quality gate as a blocking task
 - [x] **dbt Core on Trino** — SQL-first Gold layer, tested, emitting lineage to Marquez
