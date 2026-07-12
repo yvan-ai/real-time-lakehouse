@@ -9,11 +9,10 @@
 
 set -euo pipefail
 
-SPARK_IMAGE="apache/spark:3.5.3-python3"
-PACKAGES="\
-org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,\
-org.apache.hadoop:hadoop-aws:3.3.4,\
-com.amazonaws:aws-java-sdk-bundle:1.12.262"
+# Prebaked image: every jar is already on the classpath, so no --packages
+# Maven downloads at runtime (the WSL egress truncates them — seen live).
+# Build it locally first if needed: ./scripts/build-batch-image.sh
+SPARK_IMAGE="ghcr.io/yvan-ai/real-time-lakehouse/spark-batch:latest"
 
 # Read MinIO credentials from the Kubernetes Secret
 MINIO_ACCESS_KEY=$(kubectl get secret minio-credentials -n lakehouse \
@@ -45,8 +44,6 @@ docker run --rm \
   /opt/spark/bin/spark-submit \
     --master "local[2]" \
     --driver-memory 512m \
-    --packages "${PACKAGES}" \
-    --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/tmp/.ivy -Divy.home=/tmp/.ivy" \
     /opt/app/scripts/init_iceberg.py
 
 echo ""

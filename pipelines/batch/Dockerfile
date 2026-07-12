@@ -31,7 +31,16 @@ RUN set -eux; \
       org/apache/commons/commons-pool2/2.11.1/commons-pool2-2.11.1.jar \
       io/openlineage/openlineage-spark_2.12/1.24.2/openlineage-spark_2.12-1.24.2.jar \
     ; do \
-      curl -fsSL --retry 5 --retry-connrefused -O "${MAVEN}/${artefact}"; \
+      # Explicit resume loop: the WSL egress resets large transfers
+      # mid-stream (seen live on the 280 MB aws-sdk-bundle) and curl's
+      # --retry does not resume partial files on this curl version.
+      # Each attempt continues (-C -) where the previous one died.
+      ok=""; \
+      for attempt in $(seq 1 30); do \
+        if curl -fSL --connect-timeout 15 -C - -O "${MAVEN}/${artefact}"; then ok=1; break; fi; \
+        echo "retry ${attempt}/30 for ${artefact}"; sleep 3; \
+      done; \
+      [ -n "${ok}" ] || exit 1; \
     done
 USER spark
 

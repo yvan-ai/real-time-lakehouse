@@ -35,12 +35,6 @@ spec:
           env:
             - name: NESSIE_VERSION_STORE_TYPE
               value: ROCKSDB
-            # RocksDB defaults to a path under /tmp (container-ephemeral):
-            # the catalog silently vanished on every pod restart even though
-            # the PVC was mounted (seen live — 22 restarts, empty catalog).
-            # Point the store INTO the PVC mount.
-            - name: NESSIE_VERSION_STORE_ROCKS_DB_PATH
-              value: /var/lib/nessie/rocksdb
           resources:
             requests:
               memory: "256Mi"
@@ -49,8 +43,14 @@ spec:
               memory: "512Mi"
               cpu: "500m"
           volumeMounts:
+            # Nessie 0.62 hardcodes its RocksDB store at /tmp/nessie-rocksdb-store
+            # (verified with `docker diff` on a throwaway container) and exposes
+            # no working env override — so the PVC is mounted directly onto that
+            # path. Without this the whole Iceberg catalog vanished on every pod
+            # restart (seen live: 22 restarts, empty catalog, empty PVC).
             - name: data
-              mountPath: /var/lib/nessie
+              mountPath: /tmp/nessie-rocksdb-store
+              subPath: rocksdb
           livenessProbe:
             httpGet:
               path: /q/health/live
