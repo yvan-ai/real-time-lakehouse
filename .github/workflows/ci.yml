@@ -158,7 +158,7 @@ jobs:
         # The env files are gitignored (real credentials); the example files
         # are enough to render manifests for validation.
         run: |
-          for f in minio marquez airflow; do
+          for f in minio marquez airflow grafana; do
             cp "infra/kubernetes/overlays/local/secrets/${f}.env.example" \
                "infra/kubernetes/overlays/local/secrets/${f}.env"
           done

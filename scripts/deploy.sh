@@ -14,7 +14,7 @@ REPO_ROOT="$(dirname "${SCRIPT_DIR}")"
 OVERLAY="${REPO_ROOT}/infra/kubernetes/overlays/local"
 SECRETS_DIR="${OVERLAY}/secrets"
 
-for env_file in minio.env marquez.env airflow.env; do
+for env_file in minio.env marquez.env airflow.env grafana.env; do
   if [[ ! -f "${SECRETS_DIR}/${env_file}" ]]; then
     echo "ERROR: ${SECRETS_DIR}/${env_file} not found." >&2
     echo "  cp ${SECRETS_DIR}/${env_file}.example ${SECRETS_DIR}/${env_file}  # then edit" >&2

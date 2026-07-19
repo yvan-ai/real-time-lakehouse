@@ -186,8 +186,15 @@ spec:
         - name: grafana
           image: grafana/grafana:10.4.2
           env:
+            # From the grafana-credentials Secret (secretGenerator over the
+            # gitignored overlays/local/secrets/grafana.env — same pattern as
+            # MinIO/Marquez/Airflow). Never a literal here: this file is
+            # public git history.
             - name: GF_SECURITY_ADMIN_PASSWORD
-              value: lakehouse   # override via secret in production
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-credentials
+                  key: GF_SECURITY_ADMIN_PASSWORD
             - name: GF_PATHS_PROVISIONING
               value: /etc/grafana/provisioning
             - name: GF_PATHS_DATA
