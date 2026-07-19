@@ -61,6 +61,12 @@ flowchart LR
         RT[Real-time consumers]
     end
 
+    subgraph Platform["Platform (cross-cutting)"]
+        MZ[Marquez<br/>OpenLineage graph]
+        MON[Prometheus + Grafana<br/>runbook'd alerts]
+        CD[ArgoCD ApplicationSet<br/>dev → staging → prod<br/>gated promotions]
+    end
+
     PG -- WAL --> DBZ --> K
     FX --> PL --> K
     K -- CDC topics --> FL
@@ -77,6 +83,12 @@ flowchart LR
     GX -. validates via .-> TR
     TR --> BI
     K --> RT
+
+    SP -. OpenLineage .-> MZ
+    DBT -. dbt-ol .-> MZ
+    AF -. register_lineage .-> MZ
+    GX -. gx_* metrics .-> MON
+    CD -. reconciles from git .-> Ingestion & Lakehouse & Orchestration
 ```
 
 Two paths consume the same CDC stream:
@@ -86,6 +98,10 @@ Two paths consume the same CDC stream:
 - **Cold path** — Spark lands the raw CDC envelopes in Bronze and deduplicates into Silver
   (last-write-wins on `ts_ms`); dbt builds the Gold KPI tables on Trino. A daily Airflow DAG
   chains both with a blocking Great Expectations gate and lineage registration.
+- **Platform band** — every run emits lineage to Marquez and metrics to Prometheus, and the
+  whole stack is desired state in git: ArgoCD materialises it as three environments with
+  gated promotions (see [GitOps](#gitops--infrastructure-as-code) for the control-plane
+  diagram).
 
 ## Tech stack
 
