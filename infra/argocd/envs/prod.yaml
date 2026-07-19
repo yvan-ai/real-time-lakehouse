@@ -6,7 +6,7 @@
 # OutOfSync until a human triggers the sync — the promotion gate
 # (`scripts/promote.sh prod --sync`). See ADR-0012.
 env: prod
-path: infra/kubernetes/overlays/prod
+overlayPath: infra/kubernetes/overlays/prod
 namespace: lakehouse-prod
 targetRevision: main
 syncMode: manual

@@ -5,7 +5,7 @@
 # bases; the CD workflow bumps them on every main build, so dev always runs
 # the latest release.
 env: dev
-path: infra/kubernetes/overlays/dev
+overlayPath: infra/kubernetes/overlays/dev
 namespace: lakehouse
 targetRevision: main
 syncMode: automated

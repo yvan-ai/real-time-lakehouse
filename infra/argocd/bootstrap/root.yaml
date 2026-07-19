@@ -1,12 +1,13 @@
 ---
-# Root application (app-of-apps) — the ONLY ArgoCD object applied by hand
-# (bootstrap.sh / install-argocd.sh). It reconciles infra/argocd/control-plane
+# Root application (app-of-apps). It reconciles infra/argocd/control-plane
 # from git: the lakehouse AppProject and the lakehouse-envs ApplicationSet,
 # which in turn generates the per-environment applications
 # (lakehouse-dev / lakehouse-staging / lakehouse-prod) — see ADR-0012.
 #
-# Lives in the built-in `default` project on purpose: it *creates* the
-# lakehouse project, so it cannot belong to it (chicken-and-egg).
+# Bootstrap order (bootstrap.sh): the AppProject must be applied once before
+# this file — the core install ships no `default` project, and an Application
+# referencing a missing project is rejected. After that first apply the root
+# app manages the project from git like everything else.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -17,7 +18,7 @@ metadata:
   labels:
     team: data-platform
 spec:
-  project: default
+  project: lakehouse
 
   source:
     repoURL: https://github.com/yvan-ai/real-time-lakehouse

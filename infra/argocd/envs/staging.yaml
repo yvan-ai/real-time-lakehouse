@@ -5,7 +5,7 @@
 # in overlays/staging; `scripts/promote.sh staging` moves them forward.
 # Fully git-defined namespace ⇒ prune is safe.
 env: staging
-path: infra/kubernetes/overlays/staging
+overlayPath: infra/kubernetes/overlays/staging
 namespace: lakehouse-staging
 targetRevision: main
 syncMode: automated

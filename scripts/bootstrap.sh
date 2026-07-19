@@ -103,8 +103,11 @@ kubectl apply -f "${REPO_ROOT}/infra/kubernetes/base/airflow/db-init-job.yaml"
 
 info "[7/7] ArgoCD core (GitOps reconciliation)"
 "${SCRIPT_DIR}/install-argocd.sh"
-# Everything else is git-driven: the root app reconciles the control plane
-# (project + ApplicationSet), which generates lakehouse-dev/staging/prod.
+# The project must exist before the root app references it (core install
+# ships no `default` project). After this one-time apply, everything is
+# git-driven: the root app reconciles the control plane (project +
+# ApplicationSet), which generates lakehouse-dev/staging/prod.
+kubectl apply -f "${REPO_ROOT}/infra/argocd/control-plane/project.yaml"
 kubectl apply -f "${REPO_ROOT}/infra/argocd/bootstrap/root.yaml"
 
 info "Done. Next steps:"

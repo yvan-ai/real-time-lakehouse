@@ -47,7 +47,10 @@ spec:
       source:
         repoURL: https://github.com/yvan-ai/real-time-lakehouse
         targetRevision: '{{.targetRevision}}'
-        path: '{{.path}}'
+        # `overlayPath`, not `path`: the git files generator reserves `path`
+        # for its own parameters (the matched file's path object) and would
+        # shadow a `path` key defined in the env files.
+        path: '{{.overlayPath}}'
 
       destination:
         server: https://kubernetes.default.svc
