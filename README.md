@@ -17,8 +17,11 @@ e-commerce load (see [Results & metrics](#results--metrics)).
 Postgres changes are captured by **Debezium CDC** and streamed through **Kafka**; **Flink**
 aggregates them in real time (exactly-once, 1-minute event-time windows) while **Spark** and
 **dbt on Trino** build the Bronze→Silver→Gold **Iceberg** layers on **MinIO**. A daily
-**Airflow** DAG chains batch → dbt → a **blocking quality gate** → lineage, and the 80+
-Kubernetes resources are reconciled from git by **ArgoCD** and provisioned by **Terraform**.
+**Airflow** DAG chains batch → dbt → a **blocking quality gate** → lineage. The 90+
+Kubernetes resources are reconciled from git by **ArgoCD across three environments** —
+an ApplicationSet generates `dev`/`staging`/`prod`, releases move between them as
+**git-committed promotions** with post-sync smoke verification, and prod only changes
+after a human opens the gate — with operators provisioned by **Terraform**.
 
 ## Architecture
 
@@ -103,7 +106,8 @@ Two paths consume the same CDC stream:
 | Lineage | OpenLineage + Marquez | Automatic Spark lineage, dbt emitter, declarative edges |
 | Deployment | Kubernetes (k3s) + Kustomize | Declarative manifests, WSL2-friendly |
 | IaC | Terraform | Operators via Helm releases (local), EKS+MSK+S3 skeleton (cloud) |
-| GitOps / CI | ArgoCD core + GitHub Actions | Auto-sync from main; lint, tests, images, Data Docs |
+| GitOps / CD | ArgoCD core + ApplicationSet | 3 environments from git; gated promotions with smoke verification |
+| CI | GitHub Actions | Lint, types, tests, dbt, Terraform, kubeconform, sha-tagged images, Data Docs |
 | Observability | Prometheus + Grafana | Pipeline / Kafka / Flink dashboards & runbook'd alerts |
 | BI serving | Superset (Compose profile `bi`) | Dashboards on the Gold tables through Trino |
 
@@ -119,10 +123,16 @@ Two paths consume the same CDC stream:
 - **Orchestrated, gated, reconciled** — a daily Airflow DAG chains Spark, dbt and a
   blocking Great Expectations gate; ArgoCD core auto-syncs the cluster from `main`;
   Terraform owns the operators (ADR-0010 draws the IaC boundaries).
+- **Multi-environment promotion, GitOps-native** — one ApplicationSet generates
+  `dev`/`staging`/`prod`; a promotion is a git commit that moves the image tag one
+  environment forward, a PostSync smoke Job re-verifies **on the promoted image**, and
+  prod has no automated sync — a human opens the gate (ADR-0012, proven live).
 - **Everything fits in 16 GB** — every pod defines requests/limits; the full stack is tuned
   for WSL2 (see [docs/architecture.md](docs/architecture.md#resource-budget)).
-- **No plaintext secrets** — credentials come from gitignored env files rendered into
-  Kubernetes Secrets by Kustomize; CI validates manifests with a placeholder.
+- **No plaintext secrets — audited and enforced** — every credential comes from gitignored
+  env files rendered into Kubernetes Secrets by Kustomize (CI validates with placeholders);
+  the one legacy hardcoded password found in an audit was moved to a Secret and **rotated
+  live** (2026-07-19).
 
 ## Quick start
 
@@ -152,6 +162,10 @@ kubectl port-forward svc/airflow 8081:8080 -n orchestration
 # 5. Query with Trino
 kubectl port-forward svc/trino 8080:8080 -n lakehouse
 # → SELECT * FROM iceberg.gold.daily_revenue;
+
+# 6. (optional) Walk the release through the environments — see "GitOps" below
+./scripts/promote.sh staging        # dev → staging (auto-sync + smoke verification)
+./scripts/promote.sh prod --sync    # staging → prod, through the manual gate
 ```
 
 ### Option B — Lightweight dev stack (no Kubernetes)
@@ -322,6 +336,7 @@ Key choices are documented as ADRs in [docs/decisions/](docs/decisions/):
 - [ADR-0009](docs/decisions/0009-airflow-orchestration.md) — Airflow (standalone-style) for orchestration
 - [ADR-0010](docs/decisions/0010-iac-boundaries.md) — IaC boundaries: Terraform vs kustomize vs ArgoCD
 - [ADR-0011](docs/decisions/0011-lightweight-el-over-airbyte.md) — Lightweight Polars EL loader over Airbyte
+- [ADR-0012](docs/decisions/0012-multi-env-promotion-applicationsets.md) — Multi-environment promotion with ArgoCD ApplicationSets
 
 ## Testing & quality
 
@@ -386,6 +401,25 @@ RAM budget) reconciles **three environments** from `main`. One hand-applied root
 `infra/argocd/envs/{dev,staging,prod}.yaml` and generates one application per
 environment ([ADR-0012](docs/decisions/0012-multi-env-promotion-applicationsets.md)):
 
+```mermaid
+flowchart LR
+    subgraph Git["git (main)"]
+        ENV["envs/*.yaml<br/>1 file = 1 environment"]
+        OV["overlays/{dev,staging,prod}<br/>per-env image pins"]
+    end
+
+    ROOT[root app<br/>app-of-apps] --> APPSET[ApplicationSet<br/>lakehouse-envs]
+    ENV --> APPSET
+    APPSET --> DEV[lakehouse-dev<br/>full platform<br/>auto-sync]
+    APPSET --> STG[lakehouse-staging<br/>verification slice<br/>auto-sync + smoke]
+    APPSET --> PROD[lakehouse-prod<br/>verification slice<br/>manual gate 🔒]
+
+    CI[CI: sha-tagged images] -->|CD bumps base tags| DEV
+    DEV -->|promote.sh staging<br/>= git commit| STG
+    STG -->|promote.sh prod<br/>= git commit + gate| PROD
+    OV -.-> STG & PROD
+```
+
 ```
 merge to main ──► CI builds sha-tagged images ──► CD bumps base tags ──► dev  (auto-sync)
 ./scripts/promote.sh staging   # copies dev's tag → staging (auto-sync + PostSync smoke Job)
@@ -419,14 +453,16 @@ draws the boundaries between Terraform, kustomize, ArgoCD and the scripts):
 
 ## Results & metrics
 
-Verified **live on the running cluster** (2026-07-12) under simulated e-commerce load,
-on a single 16 GB WSL2 laptop:
+Verified **live on the running cluster** across two verification campaigns
+(2026-07-12 and 2026-07-19) under simulated e-commerce load, on a single
+16 GB WSL2 laptop:
 
 | Metric | Value |
 |---|---|
-| End-to-end Airflow run (Spark → dbt → GX gate → lineage) | ✅ green — and a **red-gate run proven**: an empty EL lane failed the whole DAG, by design |
+| End-to-end Airflow run (Spark → dbt → GX gate → lineage) | ✅ green (re-verified 2026-07-19 on fresh traffic) — and a **red-gate run proven**: an empty EL lane failed the whole DAG, by design |
 | Data-quality checks gating each run | 96 GX expectations (9 suites) + 10 dbt tests, blocking |
-| Gold served through Trino (built by dbt) | 385 orders · 218,180.92 revenue across 5 days of demo load |
+| Gold served through Trino (built by dbt) | 7 days of demo load · 419 customer-metric rows, refreshed live 2026-07-19 |
+| Live Flink window under load | 52 orders · 27,003.17 revenue aggregated in one 1-minute event-time window |
 | Lineage graph in Marquez | 22 jobs — Spark, per-model dbt, Debezium, Flink, EL loader |
 | GitOps selfHeal (ArgoCD core) | deleted Deployment recreated in ~20 s; uncommitted drift reverted in minutes |
 | Multi-env promotion chain (2026-07-19) | dev → staging → prod via one ApplicationSet; promotions are git commits; PostSync smoke green **on the promoted image** in both envs; prod moved only after a human opened the gate |
@@ -436,12 +472,15 @@ on a single 16 GB WSL2 laptop:
 | CI checks on every commit | 10 jobs — lint, types, unit tests, dbt, Terraform, kubeconform, images, docs |
 | Architecture Decision Records | 12 |
 
-**Battle-tested** — the live verification surfaced and fixed **nine real defects**
-(`git log --oneline --grep="fix(live)"`): a Nessie catalog silently vanishing on every
-pod restart, Airflow parsing zero DAGs because of the ConfigMap mount layout, an ArgoCD
-controller starved below its first sync, a lineage emitter with no trino adapter, an
-egress link that truncates large downloads, and more. Each fix is an atomic commit
-carrying its own post-mortem.
+**Battle-tested** — the two live-verification campaigns surfaced and fixed
+**thirteen real defects**: a Nessie catalog silently vanishing on every pod restart,
+Airflow parsing zero DAGs because of the ConfigMap mount layout, an ArgoCD controller
+starved below its first sync, an egress link that truncates large downloads, an
+ApplicationSet git generator silently shadowing a template parameter, ArgoCD hooks
+being invisible to the sync diff (a promotion that never rolled out), a CD workflow
+bumping tags no image had been built for, an OOM-looping scheduler, a hardcoded
+Grafana password found in an audit and **rotated live** — and more. Each fix is an
+atomic commit carrying its own post-mortem.
 
 ## Roadmap
 
