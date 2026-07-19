@@ -26,3 +26,18 @@ images:
 - name: spark-batch
   newName: ghcr.io/yvan-ai/real-time-lakehouse/spark-batch
   newTag: sha-01c1779
+
+# Mirror the promoted image into the tracked release-info ConfigMap: the
+# smoke Job is a hook (excluded from the sync diff), so this is what makes a
+# promotion turn the app OutOfSync and re-run the smoke.
+replacements:
+  - source:
+      kind: Job
+      name: env-smoke
+      fieldPath: spec.template.spec.containers.0.image
+    targets:
+      - select:
+          kind: ConfigMap
+          name: release-info
+        fieldPaths:
+          - data.image

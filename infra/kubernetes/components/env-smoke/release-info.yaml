@@ -1,0 +1,19 @@
+---
+# Tracked materialisation of the promoted release (ADR-0012). The smoke Job
+# is an ArgoCD *hook* and hooks are excluded from the desired/live diff — a
+# promotion that only changed the hook's image would never turn the app
+# OutOfSync, so auto-sync would never re-run the smoke (found live). This
+# ConfigMap carries the promoted image reference as a normal, diffable
+# resource; a kustomize `replacements` rule in each env overlay copies the
+# Job's (already tag-pinned) image here, so promote.sh still edits only the
+# `images:` block.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-info
+  labels:
+    app: env-smoke
+    app.kubernetes.io/part-of: real-time-lakehouse
+    layer: environments
+data:
+  image: set-by-kustomize-replacements

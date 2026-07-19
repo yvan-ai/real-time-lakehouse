@@ -7,6 +7,7 @@ kind: Component
 
 resources:
   - smoke-job.yaml
+  - release-info.yaml
 
 configMapGenerator:
   - name: env-smoke-script
