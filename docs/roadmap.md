@@ -344,6 +344,61 @@ Polars loader shows up in the Marquez graph.
 
 ---
 
+# Roadmap v3 — Multi-environment CD
+
+## Pillar 10 — ArgoCD ApplicationSets: dev → staging → prod promotion
+
+### 10.1 Architecture decision — ADR-0012 — S
+
+- [x] Environments are **folders on `main`** (no env branches), one parameter
+      file each (`infra/argocd/envs/*.yaml`), consumed by an ApplicationSet
+      **git file generator**; per-env sync policy via `templatePatch`.
+- [x] **Asymmetric materialisation** for the 16 GB node: dev = full platform
+      (overlays/dev wraps local); staging/prod = verification slice — own
+      GitOps-owned namespace/quota (zero steady-state pods) + PostSync smoke
+      Job on the *promoted* spark-batch image, read-only against Trino.
+
+### 10.2 Control plane — M
+
+- [x] App-of-apps: `bootstrap/root.yaml` (only hand-applied object) reconciles
+      `control-plane/` (AppProject + `lakehouse-envs` ApplicationSet), which
+      generates `lakehouse-dev/-staging/-prod`; `lakehouse-local/-cloud`
+      retired (dev adopted the 80 platform resources with no downtime).
+- [x] ApplicationSet controller re-enabled (was scaled to 0 since pillar 6)
+      with quota-sized resources; `argocd` namespace quota raised
+      (640 Mi requests / 1536 Mi limits).
+
+### 10.3 Promotion mechanics — M
+
+- [x] `scripts/promote.sh` — a promotion IS a git commit: copies the source
+      env's tag into the target overlay (`kustomize edit set image`),
+      strict chain (bases → staging → prod). `Promote` workflow_dispatch
+      mirrors it from the GitHub UI.
+- [x] **prod gate**: no automated sync policy — the promotion commit leaves
+      the app OutOfSync until `promote.sh prod --sync` patches the
+      Application with a sync operation (ArgoCD core has no API server).
+- [x] CI validates all four overlays + the ArgoCD control plane manifests.
+
+### 10.4 Live verification — S
+
+- [x] **Verified live 2026-07-19**: staging promoted `sha-01c1779 →
+      sha-f41896b` by commit, auto-synced, smoke re-ran green **on the
+      promoted image**; prod stayed OutOfSync (no namespace!) until the gate
+      opened, then synced and its smoke passed 2/2 in 4 s.
+- [x] Two defects found & fixed live: the git file generator **reserves the
+      `path` parameter** (shadowed the env files' key), and **hooks are
+      excluded from the sync diff** — a promotion changing only the hook
+      image never turned the app OutOfSync ⇒ tracked `release-info`
+      ConfigMap derived from the pinned tag via kustomize `replacements`.
+
+**Done when**: a release moves dev → staging → prod exclusively through git
+commits, each environment re-verifies on its own promoted image, and prod
+never changes without a human opening the gate. *(✓ all three shown live
+2026-07-19 — `kubectl get applications -n argocd` shows the three generated
+apps Synced/Healthy, prod's smoke ran the staged tag.)*
+
+---
+
 ## Platform hardening (folded from the README backlog)
 
 - [x] Prebaked Spark batch image (jars + job scripts bundled,

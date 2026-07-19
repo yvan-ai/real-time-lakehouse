@@ -429,11 +429,12 @@ on a single 16 GB WSL2 laptop:
 | Gold served through Trino (built by dbt) | 385 orders · 218,180.92 revenue across 5 days of demo load |
 | Lineage graph in Marquez | 22 jobs — Spark, per-model dbt, Debezium, Flink, EL loader |
 | GitOps selfHeal (ArgoCD core) | deleted Deployment recreated in ~20 s; uncommitted drift reverted in minutes |
+| Multi-env promotion chain (2026-07-19) | dev → staging → prod via one ApplicationSet; promotions are git commits; PostSync smoke green **on the promoted image** in both envs; prod moved only after a human opened the gate |
 | Hot-path latency (Postgres commit → dashboard) | ~60 s (1-minute event-time windows) |
 | Iceberg tables (Bronze / Silver / Gold) | 9 (4 / 3 / 2), catalog surviving pod restarts (RocksDB on PVC) |
-| Kubernetes resources under GitOps | 80+ across 9 quota-guarded namespaces |
+| Kubernetes resources under GitOps | 90+ across 11 quota-guarded namespaces, 3 environments + control plane |
 | CI checks on every commit | 10 jobs — lint, types, unit tests, dbt, Terraform, kubeconform, images, docs |
-| Architecture Decision Records | 11 |
+| Architecture Decision Records | 12 |
 
 **Battle-tested** — the live verification surfaced and fixed **nine real defects**
 (`git log --oneline --grep="fix(live)"`): a Nessie catalog silently vanishing on every
@@ -460,7 +461,15 @@ in [docs/roadmap.md](docs/roadmap.md#roadmap-v2--orchestration-transformation--s
 - [x] **Second ingestion path** — Polars loader for exchange rates → `raw.kafka_events`
 - [x] **Superset** — BI serving profile on the Gold tables through Trino
 - [x] Hardening: prebaked Spark batch image (jars + jobs bundled)
-- [ ] Next: Iceberg maintenance DAG, External Secrets Operator, GX 1.x migration
+
+Roadmap v3 — multi-environment CD, delivered and **verified live** (2026-07-19,
+[ADR-0012](docs/decisions/0012-multi-env-promotion-applicationsets.md)):
+
+- [x] **ArgoCD ApplicationSets** — `lakehouse-dev/-staging/-prod` generated from one
+  env file each; promotion = a git commit (`scripts/promote.sh` / Promote workflow);
+  PostSync smoke verifies each env on its promoted image; prod behind a manual gate
+- [ ] Next: Iceberg maintenance DAG, External Secrets Operator, GX 1.x migration,
+  per-env data isolation on Nessie branches
 
 ## Contact
 

@@ -72,6 +72,11 @@ materialisation.**
 
 - Rollback = `git revert` of a promotion commit (staging picks it up
   automatically; prod after the gate).
+- **Hooks are invisible to the sync diff** (found live): a promotion that
+  only changed the smoke Job's image never turned the app OutOfSync. Each
+  env therefore renders a tracked `release-info` ConfigMap whose
+  `data.image` is derived from the pinned tag via a kustomize
+  `replacements` rule — the promotion commit always produces a real diff.
 - The smoke slice depends on the shared Trino/warehouse: a broken dev data
   plane fails staging/prod smokes — acceptable coupling on one node, and
   exactly what the slice is meant to detect before prod.
