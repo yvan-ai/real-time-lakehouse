@@ -25,6 +25,8 @@ make dev-up        # lightweight Docker Compose stack (no k8s)
 ./scripts/run-iceberg-init.sh # create Iceberg tables (Spark in Docker)
 ./scripts/run-batch.sh        # run Bronze→Silver→Gold batch Job
 ./scripts/test.sh             # run the same checks as CI locally
+./scripts/promote.sh staging  # promote dev's release to staging (git commit)
+./scripts/promote.sh prod --sync  # promote staging→prod + open the manual gate
 ```
 
 Tests without local Java: run pytest inside the Spark image —
@@ -57,8 +59,8 @@ PostgreSQL (WAL)
 | `quality/great-expectations/` | GX suites, checkpoints, runner.py |
 | `quality/tests/` | Unit tests (pytest + local SparkSession) |
 | `observability/` | Prometheus rules, Grafana dashboards |
-| `infra/kubernetes/` | Kustomize bases + `overlays/local` |
-| `infra/argocd/` | GitOps project and applications |
+| `infra/kubernetes/` | Kustomize bases + env overlays (`local`≡`dev`, `staging`, `prod`) |
+| `infra/argocd/` | GitOps control plane: root app, ApplicationSet, env files (ADR-0012) |
 | `docs/decisions/` | ADRs — read before changing architecture |
 
 ## Agent Routing (`.system/agents/`)
@@ -98,3 +100,12 @@ When working in a specific domain, read the relevant agent file first.
 
 Table initialisation: `./scripts/run-iceberg-init.sh` (port-forwards MinIO + Nessie,
 runs `scripts/init_iceberg.py` in the Spark Docker image).
+
+### Environments (ADR-0012)
+
+ArgoCD ApplicationSet generates `lakehouse-dev/-staging/-prod` from
+`infra/argocd/envs/*.yaml`. dev = full platform (base image tags, bumped by CD);
+staging/prod = verification slice (own namespace, PostSync smoke Job on the
+promoted `spark-batch` image). Promotion = `./scripts/promote.sh` (a git commit);
+prod has no auto-sync — `promote.sh prod --sync` opens the gate. Only promote
+tags already imported in the node's containerd store (WSL egress gotcha).

@@ -163,15 +163,25 @@ jobs:
                "infra/kubernetes/overlays/local/secrets/${f}.env"
           done
 
-      - name: kustomize build — local overlay + secrets
+      - name: kustomize build — env overlays + secrets + ArgoCD control plane
         # Render inside the workspace: the kubeconform container only mounts
         # /github/workspace, so /tmp on the runner is not visible to it.
+        # kustomize output has no trailing separator — add one between builds
+        # so documents never merge into each other.
         run: |
-          kustomize build infra/kubernetes/overlays/local > rendered-manifests.yaml
-          # kustomize output has no trailing separator — without it the first
-          # secrets document merges into the last overlay document.
-          echo '---' >> rendered-manifests.yaml
+          : > rendered-manifests.yaml
+          for overlay in local dev staging prod; do
+            kustomize build "infra/kubernetes/overlays/${overlay}" >> rendered-manifests.yaml
+            echo '---' >> rendered-manifests.yaml
+          done
           kustomize build infra/kubernetes/overlays/local/secrets >> rendered-manifests.yaml
+          # ArgoCD control plane: plain manifests (not a kustomization). The
+          # env parameter files (infra/argocd/envs/) are ApplicationSet data,
+          # not Kubernetes resources — excluded on purpose.
+          for f in infra/argocd/bootstrap/root.yaml infra/argocd/control-plane/*.yaml; do
+            echo '---' >> rendered-manifests.yaml
+            cat "$f" >> rendered-manifests.yaml
+          done
 
       - name: kubeconform
         uses: docker://ghcr.io/yannh/kubeconform:latest

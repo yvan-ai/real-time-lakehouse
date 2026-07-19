@@ -1,0 +1,63 @@
+---
+# Post-promotion smoke verification — ArgoCD PostSync hook (ADR-0012).
+#
+# Runs after every sync of a promoted environment (staging: each promotion
+# commit; prod: each manually-gated sync) ON the promoted spark-batch image —
+# the pod's image IS the proof that the promotion rolled out. Read-only: it
+# validates the Gold tables through Trino and never writes, so promoted
+# environments can share the dev data plane on this single-node cluster.
+#
+# BeforeHookCreation: the previous run is replaced on the next sync, so the
+# last result stays inspectable in the env namespace between promotions.
+# imagePullPolicy IfNotPresent: the node egress truncates the 750 MB GHCR
+# layer — only tags already imported into containerd can be promoted (see
+# scripts/promote.sh and the 2026-07-07 runbook note).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: env-smoke
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  labels:
+    app: env-smoke
+    app.kubernetes.io/part-of: real-time-lakehouse
+    layer: environments
+spec:
+  # One retry: Trino answers slowly from cold on its 500m-CPU pod.
+  backoffLimit: 1
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: env-smoke
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: smoke
+          image: spark-batch
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/opt/smoke/smoke_check.py"]
+          env:
+            - name: LAKEHOUSE_ENV_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: TRINO_URL
+              value: "http://trino.lakehouse.svc.cluster.local:8080"
+          resources:
+            requests:
+              # Plain python3 on the fat image — no Spark session started.
+              memory: 128Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 300m
+          volumeMounts:
+            - name: smoke-script
+              mountPath: /opt/smoke
+      volumes:
+        - name: smoke-script
+          configMap:
+            name: env-smoke-script

@@ -31,8 +31,12 @@ test:            ## Run unit tests with coverage
 	$(PYTHON) -m pytest quality/tests -v --cov --cov-report=term-missing
 
 validate:        ## Build + validate Kubernetes manifests (kustomize + kubeconform)
-	kustomize build infra/kubernetes/overlays/local \
-	  | kubeconform -strict -ignore-missing-schemas -kubernetes-version 1.29.0 -summary
+	@for overlay in local dev staging prod; do \
+	  echo "── overlays/$$overlay"; \
+	  kustomize build infra/kubernetes/overlays/$$overlay > /tmp/lakehouse-validate.yaml || exit 1; \
+	  kubeconform -strict -ignore-missing-schemas -kubernetes-version 1.29.0 -summary \
+	    /tmp/lakehouse-validate.yaml || exit 1; \
+	done
 
 quality:         ## Run Great Expectations checkpoints (requires Trino)
 	$(PYTHON) quality/great-expectations/runner.py --layer all

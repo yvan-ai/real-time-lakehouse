@@ -7,7 +7,8 @@
 #   3-5. Generate credential env files if missing (MinIO, Marquez, Airflow)
 #   6. Apply secrets + the full local overlay (MinIO, Postgres, Kafka, Flink,
 #      Nessie, Trino, monitoring, Marquez, Airflow, topics, Kafka Connect)
-#   7. Install ArgoCD core and register the lakehouse-local application
+#   7. Install ArgoCD core and register the root application (app-of-apps →
+#      lakehouse-envs ApplicationSet → dev / staging / prod — ADR-0012)
 #
 # Idempotent: safe to re-run. Each step skips work already done.
 
@@ -102,8 +103,9 @@ kubectl apply -f "${REPO_ROOT}/infra/kubernetes/base/airflow/db-init-job.yaml"
 
 info "[7/7] ArgoCD core (GitOps reconciliation)"
 "${SCRIPT_DIR}/install-argocd.sh"
-kubectl apply -f "${REPO_ROOT}/infra/argocd/project.yaml"
-kubectl apply -f "${REPO_ROOT}/infra/argocd/apps/lakehouse-local.yaml"
+# Everything else is git-driven: the root app reconciles the control plane
+# (project + ApplicationSet), which generates lakehouse-dev/staging/prod.
+kubectl apply -f "${REPO_ROOT}/infra/argocd/bootstrap/root.yaml"
 
 info "Done. Next steps:"
 echo "  - Wait for pods:         kubectl get pods -A -w"

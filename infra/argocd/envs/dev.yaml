@@ -1,0 +1,12 @@
+# Environment parameters consumed by the lakehouse-envs ApplicationSet
+# (infra/argocd/control-plane/applicationset.yaml). NOT a Kubernetes manifest.
+#
+# dev — the full platform (wraps overlays/local). Image tags live in the
+# bases; the CD workflow bumps them on every main build, so dev always runs
+# the latest release.
+env: dev
+path: infra/kubernetes/overlays/dev
+namespace: lakehouse
+targetRevision: main
+syncMode: automated
+prune: "false"

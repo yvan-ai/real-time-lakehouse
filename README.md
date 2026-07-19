@@ -203,8 +203,8 @@ make validate   # kustomize build + kubeconform
 │   ├── architecture.md       # Detailed design & resource budget
 │   └── decisions/            # Architecture Decision Records (ADRs)
 ├── infra/
-│   ├── kubernetes/           # Kustomize bases + local overlay (secrets split out)
-│   ├── argocd/               # GitOps project & applications (auto-sync)
+│   ├── kubernetes/           # Kustomize bases + env overlays dev/staging/prod (secrets split out)
+│   ├── argocd/               # GitOps control plane: root app + ApplicationSet → 3 envs
 │   └── terraform/            # local: operators via Helm · aws: EKS+MSK+S3 skeleton
 ├── observability/            # Prometheus rules, Grafana dashboards, Superset exports
 ├── pipelines/
@@ -380,17 +380,32 @@ documented there).
 
 ## GitOps & infrastructure as code
 
-**ArgoCD core** (controller + repo-server only — no UI/API pods, RAM budget) reconciles
-`infra/kubernetes/overlays/local` from `main` automatically: merging a change rolls the
-pods with no human `kubectl apply`. The CD workflow just bumps image tags; auto-sync picks
-them up. Two design points make this safe
-([ADR-0006](docs/decisions/0006-gitops-deployment-with-argocd.md)):
+**ArgoCD core** (controller + repo-server + ApplicationSet controller — no UI/API pods,
+RAM budget) reconciles **three environments** from `main`. One hand-applied root app
+(app-of-apps) syncs the control plane; the `lakehouse-envs` **ApplicationSet** reads
+`infra/argocd/envs/{dev,staging,prod}.yaml` and generates one application per
+environment ([ADR-0012](docs/decisions/0012-multi-env-promotion-applicationsets.md)):
 
-- **Secrets live outside the tracked overlay** (`overlays/local/secrets/`, gitignored env
+```
+merge to main ──► CI builds sha-tagged images ──► CD bumps base tags ──► dev  (auto-sync)
+./scripts/promote.sh staging   # copies dev's tag → staging (auto-sync + PostSync smoke Job)
+./scripts/promote.sh prod      # copies staging's tag → prod … stays OutOfSync on purpose
+./scripts/promote.sh prod --sync   # the gate: a human opens it (k8s patch — no API server)
+```
+
+- **dev** materialises the full platform; **staging/prod** materialise a verification
+  slice (own namespace + quota, zero steady-state pods, and a **PostSync smoke Job that
+  runs on the promoted image**, read-only against the shared warehouse) — three full
+  stacks don't fit in 16 GB, and the promotion mechanics don't care.
+- **A promotion is a git commit** — `git log` on the overlay kustomizations is the
+  release history per environment; rollback = `git revert`
+  ([ADR-0006](docs/decisions/0006-gitops-deployment-with-argocd.md)).
+- **Secrets live outside the tracked overlays** (`overlays/local/secrets/`, gitignored env
   files applied only by `bootstrap.sh`/`deploy.sh`) — so the repo-server can always build
-  the overlay from a clean checkout.
-- **Prune stays off** — immutable Jobs (`batch-pipeline`, `quality-gate`, `*-db-init`) and
-  script-refreshed ConfigMaps are not in git and must survive syncs.
+  the overlays from a clean checkout.
+- **Prune stays off in dev** — immutable Jobs (`batch-pipeline`, `quality-gate`,
+  `*-db-init`) and script-refreshed ConfigMaps are not in git and must survive syncs.
+  staging/prod namespaces are fully git-defined, so they prune.
 
 **Terraform** owns the cluster add-ons ([ADR-0010](docs/decisions/0010-iac-boundaries.md)
 draws the boundaries between Terraform, kustomize, ArgoCD and the scripts):

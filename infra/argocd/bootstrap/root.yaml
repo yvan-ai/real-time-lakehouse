@@ -1,0 +1,42 @@
+---
+# Root application (app-of-apps) — the ONLY ArgoCD object applied by hand
+# (bootstrap.sh / install-argocd.sh). It reconciles infra/argocd/control-plane
+# from git: the lakehouse AppProject and the lakehouse-envs ApplicationSet,
+# which in turn generates the per-environment applications
+# (lakehouse-dev / lakehouse-staging / lakehouse-prod) — see ADR-0012.
+#
+# Lives in the built-in `default` project on purpose: it *creates* the
+# lakehouse project, so it cannot belong to it (chicken-and-egg).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lakehouse-root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    team: data-platform
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/yvan-ai/real-time-lakehouse
+    targetRevision: main
+    path: infra/argocd/control-plane
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    # Control-plane objects are small and fully git-defined: prune is safe
+    # here (unlike the data plane, where Jobs/ConfigMaps live outside git).
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

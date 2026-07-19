@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# prod — the gated end of the promotion chain (ADR-0012).
+# Same verification slice as staging; what differs is the sync policy: the
+# lakehouse-prod application has NO automated sync, so a promotion commit
+# leaves it OutOfSync until a human triggers `scripts/promote.sh prod --sync`.
+# On a multi-cluster setup this overlay would include the full base list.
+
+namespace: lakehouse-prod
+
+resources:
+  - namespace.yaml
+
+components:
+  - ../../components/env-smoke
+
+labels:
+  - pairs:
+      environment: prod
+
+# Promoted by `scripts/promote.sh prod` (strict chain: prod only ever
+# receives the tag staging currently runs). `kustomize edit set image`
+# rewrites this block.
+images:
+- name: spark-batch
+  newName: ghcr.io/yvan-ai/real-time-lakehouse/spark-batch
+  newTag: sha-01c1779

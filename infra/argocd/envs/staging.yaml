@@ -1,0 +1,12 @@
+# Environment parameters consumed by the lakehouse-envs ApplicationSet
+# (infra/argocd/control-plane/applicationset.yaml). NOT a Kubernetes manifest.
+#
+# staging — promotion target between dev and prod. Pins its own image tags
+# in overlays/staging; `scripts/promote.sh staging` moves them forward.
+# Fully git-defined namespace ⇒ prune is safe.
+env: staging
+path: infra/kubernetes/overlays/staging
+namespace: lakehouse-staging
+targetRevision: main
+syncMode: automated
+prune: "true"

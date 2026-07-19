@@ -1,0 +1,92 @@
+---
+# One Application per environment, generated from infra/argocd/envs/*.yaml
+# (git file generator) — ADR-0012. Adding an environment = adding one file;
+# retargeting one = editing its file. No kubectl involved.
+#
+# Sync policies differ per environment (templatePatch):
+#   dev      automated + selfHeal, prune off — Jobs and script-managed
+#            ConfigMaps live outside git in the platform namespaces.
+#   staging  automated + selfHeal, prune on — its namespace is fully
+#            git-defined, promotion commits are the only writer.
+#   prod     NO automated policy: the promotion commit leaves the app
+#            OutOfSync until a human triggers the sync (the gate) —
+#            `scripts/promote.sh prod --sync`. ArgoCD core has no API
+#            server, so the trigger is a patch of the Application object.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: lakehouse-envs
+  namespace: argocd
+  labels:
+    team: data-platform
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  # Deleting an env file (or the ApplicationSet) must never cascade-delete a
+  # running environment.
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+
+  generators:
+    - git:
+        repoURL: https://github.com/yvan-ai/real-time-lakehouse
+        revision: main
+        files:
+          - path: infra/argocd/envs/*.yaml
+
+  template:
+    metadata:
+      name: 'lakehouse-{{.env}}'
+      labels:
+        environment: '{{.env}}'
+        team: data-platform
+    spec:
+      project: lakehouse
+
+      source:
+        repoURL: https://github.com/yvan-ai/real-time-lakehouse
+        targetRevision: '{{.targetRevision}}'
+        path: '{{.path}}'
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.namespace}}'
+
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
+
+      # Ignore fields that are managed by operators (Strimzi, Flink Operator).
+      ignoreDifferences:
+        - group: kafka.strimzi.io
+          kind: Kafka
+          jsonPointers:
+            - /status
+        - group: flink.apache.org
+          kind: FlinkDeployment
+          jsonPointers:
+            - /status
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/template/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+
+  # The automated block only exists for environments that opt in — prod
+  # stays manual (the promotion gate).
+  templatePatch: |
+    {{- if eq .syncMode "automated" }}
+    spec:
+      syncPolicy:
+        automated:
+          prune: {{ .prune }}
+          selfHeal: true
+    {{- end }}

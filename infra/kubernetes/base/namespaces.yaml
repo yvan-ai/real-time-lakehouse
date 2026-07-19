@@ -271,11 +271,13 @@ metadata:
 spec:
   hard:
     # Sized for ArgoCD *core*: application-controller + repo-server + redis
-    # (no API server / UI / Dex — see scripts/install-argocd.sh).
+    # + applicationset-controller (no API server / UI / Dex — see
+    # scripts/install-argocd.sh; the ApplicationSet controller generates the
+    # per-environment applications, ADR-0012).
     # CPU: the controller needs a real 200m request — the ServerSideApply
     # dry-run over the (huge) Strimzi CRDs starves below that (seen live).
-    requests.memory: "512Mi"
-    limits.memory: "1Gi"
+    requests.memory: "640Mi"
+    limits.memory: "1536Mi"
     requests.cpu: "500m"
     limits.cpu: "1500m"
     pods: "15"

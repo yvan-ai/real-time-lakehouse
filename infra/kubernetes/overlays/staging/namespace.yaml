@@ -1,0 +1,44 @@
+---
+# staging environment namespace — GitOps-owned, unlike the shared platform
+# namespaces in base/namespaces.yaml which scripts apply before ArgoCD exists
+# (ADR-0012 refines the ADR-0010 boundary): each promoted environment carries
+# its own namespace + quota as part of its desired state.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lakehouse-staging
+  labels:
+    app.kubernetes.io/part-of: real-time-lakehouse
+    layer: environments
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: lakehouse-staging-quota
+  namespace: lakehouse-staging
+spec:
+  hard:
+    # Verification slice only (burst smoke Jobs) — steady state is zero pods.
+    requests.memory: "384Mi"
+    limits.memory: "768Mi"
+    requests.cpu: "300m"
+    limits.cpu: "1"
+    pods: "5"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: lakehouse-staging-defaults
+  namespace: lakehouse-staging
+spec:
+  limits:
+    - type: Container
+      default:
+        memory: "128Mi"
+        cpu: "100m"
+      defaultRequest:
+        memory: "64Mi"
+        cpu: "50m"
+      max:
+        memory: "512Mi"
+        cpu: "500m"

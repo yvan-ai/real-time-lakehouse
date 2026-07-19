@@ -73,6 +73,8 @@ jobs:
 
   # ── 2. ArgoCD reconciliation ──────────────────────────────────────────────
   # No sync step on purpose: the cluster runs ArgoCD *core* (no API server to
-  # call from CI — see scripts/install-argocd.sh). The lakehouse-local app
-  # auto-syncs from main (default polling interval: 3 min), so the tag-bump
-  # commit above is all CD needs to roll the pods.
+  # call from CI — see scripts/install-argocd.sh). The base tags ARE the dev
+  # environment: lakehouse-dev auto-syncs from main (default polling interval:
+  # 3 min), so the tag-bump commit above is all CD needs to roll the pods.
+  # staging/prod pin their own tags in their overlays and only move via a
+  # promotion (scripts/promote.sh or the Promote workflow) — ADR-0012.

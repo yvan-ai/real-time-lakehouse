@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# staging — promotion target between dev and prod (ADR-0012).
+# On this single 16 GB node the environment materialises the verification
+# slice only: its namespace + the PostSync smoke Job, which runs on the
+# promoted spark-batch image against the shared data plane (read-only).
+# On a multi-cluster setup this overlay would include the full base list.
+
+namespace: lakehouse-staging
+
+resources:
+  - namespace.yaml
+
+components:
+  - ../../components/env-smoke
+
+labels:
+  - pairs:
+      environment: staging
+
+# Promoted by `scripts/promote.sh staging` (dev tags live in the bases;
+# staging pins its own). `kustomize edit set image` rewrites this block.
+images:
+- name: spark-batch
+  newName: ghcr.io/yvan-ai/real-time-lakehouse/spark-batch
+  newTag: sha-01c1779

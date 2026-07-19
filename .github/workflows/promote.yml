@@ -1,0 +1,52 @@
+name: Promote
+
+# Manual promotion trigger (ADR-0012) — same mechanics as running
+# scripts/promote.sh locally: the target overlay's image tags are set to the
+# source environment's current release and the change is committed to main.
+#
+#   staging  the commit is all it takes — lakehouse-staging auto-syncs and
+#            runs its PostSync smoke Job on the promoted image.
+#   prod     the commit leaves lakehouse-prod OutOfSync on purpose; the sync
+#            gate (scripts/promote.sh prod --sync) needs cluster access and
+#            is therefore run from a machine with kubectl, not from CI.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options: [staging, prod]
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Use a PAT so the push triggers downstream ArgoCD detection.
+          # Falls back to GITHUB_TOKEN (will NOT re-trigger CI due to [skip ci]).
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Configure git author
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Promote
+        run: ./scripts/promote.sh "${{ inputs.environment }}"
+
+      - name: Prod gate reminder
+        if: inputs.environment == 'prod'
+        run: |
+          echo "::notice::prod is gated — run ./scripts/promote.sh prod --sync from a machine with cluster access to open it."

@@ -1,0 +1,13 @@
+# Environment parameters consumed by the lakehouse-envs ApplicationSet
+# (infra/argocd/control-plane/applicationset.yaml). NOT a Kubernetes manifest.
+#
+# prod — no automated sync policy (syncMode: manual): after
+# `scripts/promote.sh prod` commits the tags, the application stays
+# OutOfSync until a human triggers the sync — the promotion gate
+# (`scripts/promote.sh prod --sync`). See ADR-0012.
+env: prod
+path: infra/kubernetes/overlays/prod
+namespace: lakehouse-prod
+targetRevision: main
+syncMode: manual
+prune: "false"

@@ -12,10 +12,15 @@ spec:
   sourceRepos:
     - https://github.com/yvan-ai/real-time-lakehouse
 
-  # Destination namespaces — every namespace the local overlay touches.
+  # Destination namespaces — every namespace the dev overlay touches, plus
+  # the per-environment namespaces (ADR-0012) owned by staging/prod.
   destinations:
     - server: https://kubernetes.default.svc
       namespace: lakehouse
+    - server: https://kubernetes.default.svc
+      namespace: lakehouse-staging
+    - server: https://kubernetes.default.svc
+      namespace: lakehouse-prod
     - server: https://kubernetes.default.svc
       namespace: streaming
     - server: https://kubernetes.default.svc
