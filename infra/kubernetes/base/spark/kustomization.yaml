@@ -8,4 +8,4 @@ resources:
 images:
 - name: spark-batch
   newName: ghcr.io/yvan-ai/real-time-lakehouse/spark-batch
-  newTag: sha-f41896b
+  newTag: sha-e57a234
