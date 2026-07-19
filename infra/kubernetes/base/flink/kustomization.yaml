@@ -19,4 +19,4 @@ resources:
 images:
 - name: flink-order-revenue
   newName: ghcr.io/yvan-ai/real-time-lakehouse/flink-order-revenue
-  newTag: sha-a844821
+  newTag: sha-f41896b
