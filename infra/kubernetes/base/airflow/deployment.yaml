@@ -57,9 +57,12 @@ spec:
             # every task is a pod in another namespace.
             - name: AIRFLOW__CORE__PARALLELISM
               value: "4"
-            # 2 gunicorn workers instead of 4 — halves webserver memory.
+            # 1 gunicorn worker (default 4): even at the full 1536Mi quota
+            # the pod OOMed while a DAG ran (scheduler + webserver + task
+            # monitoring peaks, seen live 2026-07-19). Demo-box trade-off:
+            # slightly slower UI, stable pod.
             - name: AIRFLOW__WEBSERVER__WORKERS
-              value: "2"
+              value: "1"
             - name: AIRFLOW__WEBSERVER__SECRET_KEY
               valueFrom:
                 secretKeyRef:
