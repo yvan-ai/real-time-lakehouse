@@ -33,7 +33,13 @@ jobs:
 
       - name: Compute short SHA
         id: sha
-        run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        # The sha the CI run actually built — NOT HEAD: commits pushed after
+        # the CI run started (promotions, docs) would otherwise get their sha
+        # written into the bases with no image behind it (seen live
+        # 2026-07-19: a [skip ci] promotion commit became a phantom tag).
+        run: |
+          echo "short=$(git rev-parse --short "${{ github.event.workflow_run.head_sha }}")" \
+            >> "$GITHUB_OUTPUT"
 
       - name: Setup Kustomize
         uses: imranismail/setup-kustomize@v2
