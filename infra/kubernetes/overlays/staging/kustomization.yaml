@@ -10,18 +10,18 @@ kind: Kustomization
 namespace: lakehouse-staging
 
 resources:
-  - namespace.yaml
+- namespace.yaml
 
 components:
-  - ../../components/env-smoke
+- ../../components/env-smoke
 
 labels:
-  - pairs:
-      environment: staging
+- pairs:
+    environment: staging
 
 # Promoted by `scripts/promote.sh staging` (dev tags live in the bases;
 # staging pins its own). `kustomize edit set image` rewrites this block.
 images:
 - name: spark-batch
   newName: ghcr.io/yvan-ai/real-time-lakehouse/spark-batch
-  newTag: sha-01c1779
+  newTag: sha-f41896b
